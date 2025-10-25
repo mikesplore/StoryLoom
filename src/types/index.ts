@@ -3,6 +3,7 @@ export interface Story {
   genre: string;
   content: string;
   readTime: string;
+  coverImage?: string; // Base64 image data
 }
 
 export interface Question {
@@ -74,6 +75,19 @@ export interface TranslateResponse {
   translatedText: string;
   targetLanguage: string;
   languageName: string;
+}
+
+export interface GenerateCoverImageRequest {
+  title: string;
+  genre: string;
+  summary?: string;
+}
+
+export interface CoverImageResponse {
+  imageData: string | null;
+  prompt?: string;
+  error?: string;
+  fallback?: boolean;
 }
 
 export type ViewType = 'home' | 'story' | 'quiz' | 'results' | 'flashcards';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Sparkles, Play, CheckCircle, XCircle, RotateCcw, Menu, X, Loader2, GraduationCap, Languages, FlipHorizontal } from 'lucide-react';
+import { BookOpen, Sparkles, Play, CheckCircle, XCircle, RotateCcw, Menu, X, Loader2, GraduationCap, Languages, FlipHorizontal, Volume2, VolumeX, Pause } from 'lucide-react';
 import { storyApi } from './services/api';
 import type { Theme, StoryWithQuiz, ViewType, AgeGroup, AgeGroupInfo, Flashcard } from './types';
 
@@ -28,6 +28,18 @@ export default function StoryLoom() {
   const [showFlashcardAnswer, setShowFlashcardAnswer] = useState(false);
   const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
 
+  // Cover image state
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
+  // Text-to-Speech state
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [speechRate, setSpeechRate] = useState(1.0);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+
   // Global translation state
   const [availableLanguages, setAvailableLanguages] = useState<Record<string, string>>({});
   const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
@@ -53,12 +65,92 @@ export default function StoryLoom() {
       }
     };
     fetchOptions();
+    
+    // Load available voices for text-to-speech
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+      // Set default voice (prefer English if available)
+      if (voices.length > 0 && !selectedVoice) {
+        const englishVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+        setSelectedVoice(englishVoice);
+      }
+    };
+    
+    // Voices might not be loaded immediately
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
+
+  // Text-to-Speech functions
+  const handleSpeak = () => {
+    if (!currentStory) return;
+    
+    if (isSpeaking && !isPaused) {
+      // Pause
+      window.speechSynthesis.pause();
+      setIsPaused(true);
+    } else if (isPaused) {
+      // Resume
+      window.speechSynthesis.resume();
+      setIsPaused(false);
+    } else {
+      // Start speaking
+      const textToSpeak = selectedLanguage !== 'en' && translatedStory 
+        ? translatedStory 
+        : currentStory.content;
+      
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+      
+      utterance.rate = speechRate;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
+      
+      // Get appropriate voice for the selected language
+      if (selectedLanguage !== 'en' && availableVoices.length > 0) {
+        const langCode = selectedLanguage;
+        const matchingVoice = availableVoices.find(v => v.lang.startsWith(langCode));
+        if (matchingVoice) {
+          utterance.voice = matchingVoice;
+        }
+      }
+      
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setIsPaused(false);
+      };
+      
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        setIsPaused(false);
+      };
+      
+      utterance.onerror = (event) => {
+        console.error('Speech synthesis error:', event);
+        setIsSpeaking(false);
+        setIsPaused(false);
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+  
+  const handleStopSpeaking = () => {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setIsPaused(false);
+  };
 
   const handleGenerateStory = async () => {
     setIsGenerating(true);
     setError(null);
     setSelectedLanguage('en'); // Reset to English for new story
+    setCoverImage(null); // Reset cover image
+    handleStopSpeaking(); // Stop any ongoing speech
     
     try {
       const story = await storyApi.generateStory({
@@ -67,12 +159,44 @@ export default function StoryLoom() {
         prompt: customPrompt.trim() || undefined,
       });
       
-      // Generate quiz for the story
+      // Generate cover image in parallel with quiz
+      setIsGeneratingImage(true);
+      console.log('🎨 Starting cover image generation...');
+      const [quiz, coverImageResult] = await Promise.all([
+        storyApi.generateQuiz({
+          title: story.title,
+          content: story.content,
+        }),
+        storyApi.generateCoverImage({
+          title: story.title,
+          genre: story.genre,
+          summary: story.content.substring(0, 200), // First 200 chars as summary
+        }).catch(err => {
+          console.warn('Cover image generation failed:', err);
+          return { imageData: null, fallback: true };
+        })
+      ]);
+      
+      console.log('🖼️ Cover image result:', coverImageResult);
+      console.log('📊 Full response:', JSON.stringify(coverImageResult, null, 2));
+      console.log('📊 Image data exists?', !!coverImageResult.imageData);
+      if (coverImageResult.imageData) {
+        console.log('🎯 Image data length:', coverImageResult.imageData.length);
+        console.log('🔍 Image data preview:', coverImageResult.imageData.substring(0, 50));
+      }
+      if (coverImageResult.error) {
+        console.log('⚠️ Image generation error:', coverImageResult.error);
+      }
+      
       setIsGeneratingQuiz(true);
-      const quiz = await storyApi.generateQuiz({
-        title: story.title,
-        content: story.content,
-      });
+      setIsGeneratingImage(false);
+      
+      if (coverImageResult.imageData) {
+        console.log('✅ Setting cover image in state');
+        setCoverImage(coverImageResult.imageData);
+      } else {
+        console.log('❌ No image data received');
+      }
       
       setCurrentStory({
         ...story,
@@ -90,6 +214,7 @@ export default function StoryLoom() {
     } finally {
       setIsGenerating(false);
       setIsGeneratingQuiz(false);
+      setIsGeneratingImage(false);
     }
   };
 
@@ -239,6 +364,7 @@ export default function StoryLoom() {
     setTranslatedStory('');
     setTranslatedQuiz([]);
     setTranslatedFlashcards([]);
+    setCoverImage(null);
   };
 
   const flipFlashcard = () => {
@@ -450,7 +576,15 @@ export default function StoryLoom() {
                   <BookOpen className="w-6 h-6 text-teal-400" />
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-2">AI Stories</h3>
-                <p className="text-slate-400">Unique stories made just for you</p>
+                <p className="text-slate-400">Unique stories with beautiful covers</p>
+              </div>
+
+              <div className="bg-slate-800/50 backdrop-blur-sm border border-teal-500/20 rounded-2xl p-6 hover:border-teal-500/40 transition-all">
+                <div className="w-12 h-12 bg-orange-500/20 rounded-lg flex items-center justify-center mb-4">
+                  <Volume2 className="w-6 h-6 text-orange-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">Read Aloud</h3>
+                <p className="text-slate-400">Listen to stories in any voice</p>
               </div>
 
               <div className="bg-slate-800/50 backdrop-blur-sm border border-teal-500/20 rounded-2xl p-6 hover:border-teal-500/40 transition-all">
@@ -468,35 +602,179 @@ export default function StoryLoom() {
                 <h3 className="text-xl font-semibold text-white mb-2">Flashcards</h3>
                 <p className="text-slate-400">Learn new words easily</p>
               </div>
-
-              <div className="bg-slate-800/50 backdrop-blur-sm border border-teal-500/20 rounded-2xl p-6 hover:border-teal-500/40 transition-all">
-                <div className="w-12 h-12 bg-teal-500/20 rounded-lg flex items-center justify-center mb-4">
-                  <Languages className="w-6 h-6 text-teal-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">Any Language</h3>
-                <p className="text-slate-400">Read in your language</p>
-              </div>
             </div>
           </div>
         )}
 
         {/* Story View */}
         {activeView === 'story' && currentStory && (
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-5xl mx-auto px-4">
             <div className="bg-slate-800/50 backdrop-blur-sm border border-teal-500/20 rounded-2xl p-6 sm:p-8 md:p-10">
-              <div className="flex flex-wrap items-center gap-3 mb-4">
-                <span className="px-3 py-1 bg-teal-500/20 text-teal-300 rounded-full text-sm font-medium">
-                  {currentStory.genre}
-                </span>
-                <span className="text-slate-400 text-sm">{currentStory.readTime}</span>
-              </div>
+              {/* Storybook Cover with Title Overlay */}
+              {(() => {
+                console.log('🖼️ Render check - coverImage:', coverImage ? `exists (${coverImage.length} chars)` : 'null');
+                console.log('🖼️ Render check - isGeneratingImage:', isGeneratingImage);
+                return null;
+              })()}
+              {coverImage ? (
+                <div className="mb-8 rounded-xl overflow-hidden shadow-2xl relative group">
+                  {/* Cover Image */}
+                  <img 
+                    src={coverImage} 
+                    alt={`Cover for ${currentStory.title}`}
+                    className="w-full h-auto min-h-[400px] max-h-[500px] object-cover"
+                    onLoad={() => console.log('✅ Image loaded successfully')}
+                    onError={(e) => console.error('❌ Image failed to load:', e)}
+                  />
+                  {/* Title Overlay - Storybook Style */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-6 sm:p-8 md:p-12">
+                    <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-3 drop-shadow-2xl leading-tight">
+                      {currentStory.title}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="px-4 py-1.5 bg-teal-500/90 backdrop-blur-sm text-white rounded-full text-sm font-semibold shadow-lg">
+                        {currentStory.genre}
+                      </span>
+                      <span className="text-white/90 text-sm font-medium drop-shadow-lg flex items-center gap-1">
+                        <BookOpen className="w-4 h-4" />
+                        {currentStory.readTime}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : isGeneratingImage ? (
+                <div className="mb-8 h-[400px] bg-gradient-to-br from-slate-700/30 to-slate-800/50 rounded-xl flex items-center justify-center border border-teal-500/20">
+                  <div className="text-center">
+                    <Loader2 className="w-10 h-10 animate-spin text-teal-400 mx-auto mb-3" />
+                    <p className="text-slate-300 text-lg font-medium">Creating your story cover...</p>
+                    <p className="text-slate-500 text-sm mt-1">This may take a moment</p>
+                  </div>
+                </div>
+              ) : (
+                <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6 text-center">{currentStory.title}</h2>
+              )}
 
-              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">{currentStory.title}</h2>
               
-              {/* Story Content */}
-              <div className="prose prose-invert max-w-none mb-8">
+              {/* Text-to-Speech Controls */}
+              <div className="mb-6 flex flex-wrap gap-3 items-center bg-slate-700/30 p-4 rounded-xl">
+                <button
+                  onClick={handleSpeak}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                    isSpeaking && !isPaused
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-teal-600 hover:bg-teal-700 text-white'
+                  }`}
+                >
+                  {isSpeaking && !isPaused ? (
+                    <>
+                      <Pause className="w-4 h-4" />
+                      Pause
+                    </>
+                  ) : isPaused ? (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Resume
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="w-4 h-4" />
+                      Read Aloud
+                    </>
+                  )}
+                </button>
+                
+                {isSpeaking && (
+                  <button
+                    onClick={handleStopSpeaking}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium bg-red-600 hover:bg-red-700 text-white transition-all"
+                  >
+                    <VolumeX className="w-4 h-4" />
+                    Stop
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium bg-slate-600 hover:bg-slate-700 text-white transition-all"
+                >
+                  <Languages className="w-4 h-4" />
+                  Voice Settings
+                </button>
+                
+                {isSpeaking && (
+                  <span className="text-teal-400 text-sm font-medium animate-pulse flex items-center gap-2">
+                    <span className="w-2 h-2 bg-teal-400 rounded-full animate-bounce"></span>
+                    Reading...
+                  </span>
+                )}
+              </div>
+              
+              {/* Voice Settings Panel */}
+              {showVoiceSettings && (
+                <div className="mb-6 bg-slate-700/50 p-6 rounded-xl border border-teal-500/20">
+                  <h3 className="text-lg font-semibold text-white mb-4">Voice Settings</h3>
+                  
+                  <div className="space-y-4">
+                    {/* Voice Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Select Voice
+                      </label>
+                      <select
+                        value={selectedVoice?.name || ''}
+                        onChange={(e) => {
+                          const voice = availableVoices.find(v => v.name === e.target.value);
+                          setSelectedVoice(voice || null);
+                        }}
+                        className="w-full bg-slate-800 text-white px-4 py-2 rounded-lg border border-slate-600 focus:border-teal-500 focus:outline-none"
+                      >
+                        {availableVoices
+                          .filter(voice => {
+                            // Show voices matching the selected language, or all if English
+                            if (selectedLanguage === 'en') {
+                              return voice.lang.startsWith('en');
+                            }
+                            return voice.lang.startsWith(selectedLanguage) || voice.lang.startsWith('en');
+                          })
+                          .map(voice => (
+                            <option key={voice.name} value={voice.name}>
+                              {voice.name} ({voice.lang})
+                            </option>
+                          ))}
+                      </select>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {availableVoices.length} voices available
+                      </p>
+                    </div>
+                    
+                    {/* Speech Rate */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Reading Speed: {speechRate.toFixed(1)}x
+                      </label>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2"
+                        step="0.1"
+                        value={speechRate}
+                        onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
+                        className="w-full accent-teal-500"
+                      />
+                      <div className="flex justify-between text-xs text-slate-400 mt-1">
+                        <span>Slower</span>
+                        <span>Normal</span>
+                        <span>Faster</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Story Content - Better Typography and Spacing */}
+              <div className="prose prose-lg prose-invert max-w-none mb-8">
                 {(selectedLanguage !== 'en' && translatedStory ? translatedStory : currentStory.content).split('\n\n').map((paragraph, idx) => (
-                  <p key={idx} className="text-slate-300 text-lg leading-relaxed mb-4">
+                  <p key={idx} className="text-slate-200 text-base sm:text-lg leading-relaxed mb-6 first-letter:text-2xl first-letter:font-bold first-letter:text-teal-400">
                     {paragraph}
                   </p>
                 ))}
@@ -723,6 +1001,36 @@ export default function StoryLoom() {
           </div>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="bg-slate-900/50 backdrop-blur-md border-t border-teal-500/20 py-6 mt-12">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 text-center">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-slate-300">
+            <span>Powered by</span>
+            <a 
+              href="https://deepmind.google/technologies/gemini/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-teal-400 hover:text-teal-300 font-semibold transition-colors"
+            >
+              Google Gemini
+            </a>
+            <span className="hidden sm:inline">•</span>
+            <span>Developed by</span>
+            <a 
+              href="https://github.com/mikesplore" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-teal-400 hover:text-teal-300 font-semibold transition-colors"
+            >
+              Mike
+            </a>
+          </div>
+          <p className="text-slate-400 text-sm mt-2">
+            Learn, grow, and explore through AI-powered stories ✨
+          </p>
+        </div>
+      </footer>
 
       <style>{`
         @keyframes float {

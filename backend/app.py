@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import google.generativeai as genai
 import os
@@ -7,6 +7,10 @@ import json
 import re
 from pathlib import Path
 from deep_translator import GoogleTranslator
+import requests
+import io
+import base64
+from PIL import Image
 
 # Load environment variables from parent directory
 env_path = Path(__file__).parent.parent / '.env'
@@ -344,6 +348,112 @@ def translate_content():
     except Exception as e:
         print(f"Error translating: {e}")
         return jsonify({'error': 'Failed to translate', 'details': str(e)}), 500
+
+
+@app.route('/api/generate-cover-image', methods=['POST'])
+def generate_cover_image():
+    """Generate a story cover image using Stable Diffusion API"""
+    try:
+        data = request.json
+        title = data.get('title', '')
+        genre = data.get('genre', '')
+        story_summary = data.get('summary', '')
+        
+        if not title:
+            return jsonify({'error': 'Title is required'}), 400
+        
+        print(f"🎨 Generating cover image for: {title}")
+        
+        # Create a prompt for the image based on the story
+        image_prompt = f"Book cover illustration for '{title}', {genre} story, "
+        if story_summary:
+            image_prompt += f"{story_summary[:100]}, "
+        image_prompt += "beautiful, detailed, professional book cover art, vibrant colors, digital painting"
+        
+        # Use Hugging Face's Stable Diffusion API - try multiple reliable models
+        models = [
+            "runwayml/stable-diffusion-v1-5",           # Most reliable, widely used
+            "stabilityai/stable-diffusion-xl-base-1.0", # High quality SDXL
+            "stabilityai/stable-diffusion-2-1",         # SD 2.1
+        ]
+        
+        # Get Hugging Face API key from environment
+        hf_api_key = os.getenv('HUGGINGFACE_API_KEY')
+        
+        if not hf_api_key or hf_api_key == 'your_huggingface_token_here':
+            print("⚠️ No valid Hugging Face API key found")
+            return jsonify({
+                'imageData': None,
+                'error': 'Hugging Face API key not configured. Get one at https://huggingface.co/settings/tokens',
+                'fallback': True
+            })
+        
+        headers = {
+            "Authorization": f"Bearer {hf_api_key}"
+        }
+        
+        # Try each model until one succeeds
+        last_error = None
+        for model in models:
+            try:
+                API_URL = f"https://api-inference.huggingface.co/models/{model}"
+                print(f"🎨 Trying model: {model}")
+                
+                response = requests.post(
+                    API_URL,
+                    headers=headers,
+                    json={"inputs": image_prompt, "wait_for_model": True},  # Wait for model to load
+                    timeout=60  # Longer timeout for model loading
+                )
+                
+                print(f"📡 Image API response status: {response.status_code}")
+                
+                if response.status_code == 200:
+                    # Convert image to base64 for easy transfer
+                    image_bytes = response.content
+                    image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+                    
+                    print(f"✅ Cover image generated successfully with {model} (size: {len(image_base64)} chars)")
+                    return jsonify({
+                        'imageData': f"data:image/jpeg;base64,{image_base64}",
+                        'prompt': image_prompt,
+                        'model': model
+                    })
+                elif response.status_code == 503:
+                    # Model is loading
+                    print(f"⏳ Model {model} is loading, trying next...")
+                    last_error = f"Model loading (503)"
+                    continue
+                else:
+                    print(f"⚠️ Model {model} returned status {response.status_code}")
+                    print(f"Response: {response.text[:300]}")
+                    last_error = f"Status {response.status_code}: {response.text[:100]}"
+                    continue
+                    
+            except requests.exceptions.Timeout:
+                print(f"⏱️ Timeout for model {model}, trying next...")
+                last_error = "Request timeout"
+                continue
+            except Exception as e:
+                print(f"❌ Error with model {model}: {e}")
+                last_error = str(e)
+                continue
+        
+        # All models failed
+        print(f"⚠️ All image generation models failed. Last error: {last_error}")
+        return jsonify({
+            'imageData': None,
+            'error': f'Image generation temporarily unavailable: {last_error}',
+            'fallback': True
+        })
+    
+    except Exception as e:
+        print(f"Error generating cover image: {e}")
+        return jsonify({
+            'imageData': None,
+            'error': str(e),
+            'fallback': True
+        }), 200  # Return 200 so frontend can handle gracefully
 
 
 if __name__ == '__main__':

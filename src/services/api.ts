@@ -9,7 +9,9 @@ import type {
   GenerateFlashcardsRequest, 
   FlashcardSet,
   TranslateRequest,
-  TranslateResponse
+  TranslateResponse,
+  GenerateCoverImageRequest,
+  CoverImageResponse
 } from '../types';
 
 const API_BASE_URL = '/api';
@@ -60,6 +62,12 @@ export const storyApi = {
   // Translate text to another language
   translate: async (request: TranslateRequest): Promise<TranslateResponse> => {
     const response = await axios.post(`${API_BASE_URL}/translate`, request);
+    return response.data;
+  },
+
+  // Generate cover image for a story
+  generateCoverImage: async (request: GenerateCoverImageRequest): Promise<CoverImageResponse> => {
+    const response = await axios.post(`${API_BASE_URL}/generate-cover-image`, request);
     return response.data;
   },
 };
