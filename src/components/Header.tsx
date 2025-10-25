@@ -38,7 +38,14 @@ export default function Header({
             <div className="w-10 h-10 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-lg flex items-center justify-center">
               <BookOpen className="w-6 h-6 text-slate-900" />
             </div>
-            <h1 className="text-2xl font-bold text-white">StoryLoom</h1>
+            <button
+              onClick={handleNewStory}
+              className="text-2xl font-bold text-white hover:text-teal-300 transition-colors focus:outline-none"
+              style={{ background: 'none', border: 'none', padding: 0, margin: 0, cursor: 'pointer' }}
+              aria-label="Go to Home"
+            >
+              StoryLoom
+            </button>
           </div>
           
           {/* Desktop Nav */}
@@ -74,25 +81,21 @@ export default function Header({
             {/* Auth Buttons */}
             {currentUser ? (
               <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end">
-                  <span className="text-slate-300 text-sm font-medium">Hi, {currentUser.username}!</span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <button 
-                      onClick={() => setActiveView('profile')}
-                      className="flex items-center gap-1 px-2 py-1 bg-slate-700/50 hover:bg-slate-600 text-teal-300 hover:text-white rounded-md transition-all text-xs"
-                    >
-                      <UserPlus className="w-3 h-3" />
-                      Profile
-                    </button>
-                    <button 
-                      onClick={handleLogout}
-                      className="flex items-center gap-1 px-2 py-1 bg-red-600/80 hover:bg-red-600 text-white rounded-md transition-all text-xs"
-                    >
-                      <LogOut className="w-3 h-3" />
-                      Logout
-                    </button>
-                  </div>
-                </div>
+                <span className="text-slate-300 text-sm font-medium">Hi, {currentUser.username}!</span>
+                <button 
+                  onClick={() => setActiveView('profile')}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600 text-teal-300 hover:text-white rounded-lg transition-all text-sm"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Profile
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-all text-sm"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
               </div>
             ) : (
               <div className="flex items-center gap-3">
