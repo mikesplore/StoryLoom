@@ -36,3 +36,6 @@ __pycache__/
 venv/
 env/
 ENV/
+
+# SQLite database
+backend/instance/storyloom.db

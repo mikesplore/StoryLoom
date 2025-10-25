@@ -69,6 +69,7 @@ export interface FlashcardSet {
 
 export interface StoryWithQuiz extends Story {
   questions: Question[];
+  ageGroup?: AgeGroup;
 }
 
 export type Theme = 
@@ -89,6 +90,7 @@ export interface AgeGroupInfo {
   label: string;
   description: string;
   word_count: string;
+  emoji?: string;
 }
 
 export interface GenerateStoryRequest {
@@ -131,7 +133,7 @@ export interface CoverImageResponse {
   fallback?: boolean;
 }
 
-export type ViewType = 'home' | 'story' | 'quiz' | 'results' | 'flashcards' | 'library' | 'login' | 'register' | 'edit-story';
+export type ViewType = 'home' | 'story' | 'quiz' | 'results' | 'flashcards' | 'library' | 'login' | 'register' | 'edit-story' | 'profile';
 
 export interface Language {
   code: string;
