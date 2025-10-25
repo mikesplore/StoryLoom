@@ -2,16 +2,33 @@
 
 ## First Time Setup (5 minutes)
 
-### Step 1: Get Your Gemini API Key
+### Step 1a: Get Your Gemini API Key
 1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
 2. Sign in with your Google account
 3. Click "Create API Key"
 4. Copy the key
 
 ### Step 2: Add API Key to .env
-1. Open the `.env` file in the root directory
+1. Open the `.env` file in the root directory, or just run this code in the parent folder:
+
+   ```bash
+   cp .env.example.env .env
+   ```
 2. Paste your API key after `GEMINI_API_KEY=`
 3. Save the file
+
+
+
+### Step 1b: Get Your Hugging Face Access Token
+1. Go to [Hugging Face Tokens](https://huggingface.co/settings/tokens)
+2. Sign in or create a free account
+3. Click "New token", give it a name, and select `read` access
+4. Copy the token
+
+### Step 2: Add API Keys to .env
+1. Open the `.env` file in the root directory
+3. Paste your Hugging Face token after `HUGGINGFACE_API_KEY=`
+4. Save the file
 
 
 
