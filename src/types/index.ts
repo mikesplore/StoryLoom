@@ -18,6 +18,17 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  storiesGenerated?: number;
+  currentStreak?: number;
+  longestStreak?: number;
+  lastActivity?: string;
+}
+
+export interface UserStats {
+  storiesGenerated: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalStoriesSaved: number;
 }
 
 export interface AuthResponse {
@@ -120,4 +131,9 @@ export interface CoverImageResponse {
   fallback?: boolean;
 }
 
-export type ViewType = 'home' | 'story' | 'quiz' | 'results' | 'flashcards' | 'library' | 'login' | 'register';
+export type ViewType = 'home' | 'story' | 'quiz' | 'results' | 'flashcards' | 'library' | 'login' | 'register' | 'edit-story';
+
+export interface Language {
+  code: string;
+  name: string;
+}

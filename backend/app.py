@@ -13,6 +13,7 @@ import requests
 import io
 import base64
 from PIL import Image
+from datetime import datetime
 from models import db, User, Story
 
 # Load environment variables from parent directory
@@ -154,17 +155,12 @@ def generate_story():
         word_count = age_info['word_count']
         reading_level = age_info['description']
         
-        print(f"📖 Generating story - Theme: {theme}, Age: {age_group}, Prompt: {custom_prompt[:50] if custom_prompt else 'None'}...")
         
         # Construct the prompt for Gemini
         if custom_prompt:
             prompt = f"""Create an engaging {theme} story based on this prompt: "{custom_prompt}"
 
 The story should be:
-- Between {word_count} words
-- Written for {age_info['label']} - {reading_level}
-- Have a clear beginning, middle, and end
-- Include vivid descriptions and engaging characters
 
 Return ONLY a JSON object with this exact structure (no markdown, no code blocks):
 {{
@@ -178,11 +174,6 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
             prompt = f"""Create an original, engaging {theme} story.
 
 The story should be:
-- Between {word_count} words
-- Written for {age_info['label']} - {reading_level}
-- Have a clear beginning, middle, and end
-- Include vivid descriptions and engaging characters
-- Original and creative
 
 Return ONLY a JSON object with this exact structure (no markdown, no code blocks):
 {{
@@ -194,31 +185,20 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
 }}"""
 
         # Generate story
-        print("🤖 Calling Gemini API...")
         response = model.generate_content(prompt)
         story_text = response.text
         
-        print(f"✅ Received response from Gemini (length: {len(story_text)})")
-        print(f"First 200 chars: {story_text[:200]}")
         
         # Clean and parse JSON
         cleaned_text = clean_json_response(story_text)
-        print(f"🧹 Cleaned JSON (length: {len(cleaned_text)})")
         
         story_data = json.loads(cleaned_text)
-        print(f"✅ Successfully parsed story: {story_data.get('title', 'Unknown')}")
         
         return jsonify(story_data)
     
     except json.JSONDecodeError as e:
-        print(f"❌ JSON decode error: {e}")
-        print(f"Response text: {response.text if 'response' in locals() else 'No response'}")
         return jsonify({'error': 'Failed to parse story data', 'details': str(e)}), 500
     except Exception as e:
-        print(f"❌ Error generating story: {e}")
-        print(f"Error type: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': 'Failed to generate story', 'details': str(e)}), 500
 
 
@@ -419,7 +399,8 @@ def generate_cover_image():
         last_error = None
         for model in models:
             try:
-                API_URL = f"https://api-inference.huggingface.co/models/{model}"
+                # Use new Hugging Face Inference Providers API endpoint
+                API_URL = f"https://router.huggingface.co/hf-inference/models/{model}"
                 print(f"🎨 Trying model: {model}")
                 
                 response = requests.post(
@@ -670,10 +651,102 @@ def delete_story(story_id):
         return jsonify({'error': 'Failed to delete story'}), 500
 
 
+@app.route('/api/library/stories/<int:story_id>', methods=['PUT'])
+@login_required
+def update_story(story_id):
+    """Update a story's content"""
+    try:
+        story = Story.query.filter_by(id=story_id, user_id=current_user.id).first()
+        
+        if not story:
+            return jsonify({'error': 'Story not found'}), 404
+        
+        data = request.json
+        
+        # Update only provided fields
+        if 'title' in data:
+            story.title = data['title']
+        if 'content' in data:
+            story.content = data['content']
+        if 'genre' in data:
+            story.genre = data['genre']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Story updated successfully',
+            'story': story.to_dict()
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating story: {e}")
+        return jsonify({'error': 'Failed to update story'}), 500
+
+
+@app.route('/api/user/stats', methods=['GET'])
+@login_required
+def get_user_stats():
+    """Get user's usage statistics"""
+    try:
+        return jsonify({
+            'storiesGenerated': current_user.stories_generated,
+            'currentStreak': current_user.current_streak,
+            'longestStreak': current_user.longest_streak,
+            'totalStoriesSaved': Story.query.filter_by(user_id=current_user.id).count()
+        }), 200
+    
+    except Exception as e:
+        print(f"Error fetching stats: {e}")
+        return jsonify({'error': 'Failed to fetch statistics'}), 500
+
+
+@app.route('/api/user/activity', methods=['POST'])
+@login_required
+def update_activity():
+    """Update user activity and streak"""
+    try:
+        from datetime import timedelta
+        
+        now = datetime.utcnow()
+        last_activity = current_user.last_activity
+        
+        # Check if this is a new day
+        if last_activity:
+            days_diff = (now.date() - last_activity.date()).days
+            
+            if days_diff == 1:
+                # Continue streak
+                current_user.current_streak += 1
+                if current_user.current_streak > current_user.longest_streak:
+                    current_user.longest_streak = current_user.current_streak
+            elif days_diff > 1:
+                # Streak broken
+                current_user.current_streak = 1
+        else:
+            # First activity
+            current_user.current_streak = 1
+        
+        current_user.stories_generated += 1
+        current_user.last_activity = now
+        
+        db.session.commit()
+        
+        return jsonify({
+            'storiesGenerated': current_user.stories_generated,
+            'currentStreak': current_user.current_streak,
+            'longestStreak': current_user.longest_streak
+        }), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating activity: {e}")
+        return jsonify({'error': 'Failed to update activity'}), 500
+
+
 if __name__ == '__main__':
     # Create tables
     with app.app_context():
         db.create_all()
-        print("✅ Database tables created")
     
     app.run(debug=True, port=5000)

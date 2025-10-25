@@ -13,8 +13,26 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Usage tracking
+    stories_generated = db.Column(db.Integer, default=0)
+    last_activity = db.Column(db.DateTime, default=datetime.utcnow)
+    current_streak = db.Column(db.Integer, default=0)
+    longest_streak = db.Column(db.Integer, default=0)
+    
     # Relationship with stories
     stories = db.relationship('Story', backref='author', lazy=True, cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        """Convert user to dictionary"""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'storiesGenerated': self.stories_generated,
+            'currentStreak': self.current_streak,
+            'longestStreak': self.longest_streak,
+            'lastActivity': self.last_activity.isoformat() if self.last_activity else None
+        }
     
     def __repr__(self):
         return f'<User {self.username}>'

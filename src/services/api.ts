@@ -128,9 +128,39 @@ export const libraryApi = {
     return response.data;
   },
 
+  // Update a story
+  updateStory: async (storyId: number, updates: Partial<{ title: string; content: string; genre: string }>): Promise<{ message: string; story: SavedStory }> => {
+    const response = await axios.put(`${API_BASE_URL}/library/stories/${storyId}`, updates);
+    return response.data;
+  },
+
   // Delete a story
   deleteStory: async (storyId: number): Promise<{ message: string }> => {
     const response = await axios.delete(`${API_BASE_URL}/library/stories/${storyId}`);
+    return response.data;
+  },
+};
+
+// User Stats API
+export const userApi = {
+  // Get user statistics
+  getStats: async (): Promise<{
+    storiesGenerated: number;
+    currentStreak: number;
+    longestStreak: number;
+    totalStoriesSaved: number;
+  }> => {
+    const response = await axios.get(`${API_BASE_URL}/user/stats`);
+    return response.data;
+  },
+
+  // Update user activity (called after generating a story)
+  updateActivity: async (): Promise<{
+    storiesGenerated: number;
+    currentStreak: number;
+    longestStreak: number;
+  }> => {
+    const response = await axios.post(`${API_BASE_URL}/user/activity`);
     return response.data;
   },
 };
