@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { BookOpen, Sparkles, Play, CheckCircle, XCircle, RotateCcw, Menu, X, Loader2, GraduationCap, Languages, FlipHorizontal, Volume2, VolumeX, Pause, Save, Library, LogIn, LogOut, UserPlus, Trash2, Key, Copy, FileText, FileDown, Edit, Award } from 'lucide-react';
+import { BookOpen, Sparkles, Play, CheckCircle, XCircle, RotateCcw, Menu, X, Loader2, GraduationCap, Languages, FlipHorizontal, Volume2, VolumeX, Pause, Save, Library, LogIn, LogOut, UserPlus, Trash2, Key } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
-import { storyApi, authApi, libraryApi, userApi } from './services/api';
+import { storyApi, authApi, libraryApi } from './services/api';
 import type { Theme, StoryWithQuiz, ViewType, AgeGroup, AgeGroupInfo, Flashcard, User, SavedStory } from './types';
 
 export default function StoryLoom() {
@@ -34,20 +34,6 @@ export default function StoryLoom() {
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
   const [isSavingStory, setIsSavingStory] = useState(false);
   const [currentLoadedStoryId, setCurrentLoadedStoryId] = useState<number | null>(null);
-  
-  // Story editing state
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedTitle, setEditedTitle] = useState('');
-  const [editedContent, setEditedContent] = useState('');
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-  
-  // User stats state
-  const [userStats, setUserStats] = useState({
-    storiesGenerated: 0,
-    currentStreak: 0,
-    longestStreak: 0,
-    totalStoriesSaved: 0
-  });
   
   // Story generation form state
   const [selectedTheme, setSelectedTheme] = useState<Theme>('Mystery');
@@ -108,15 +94,6 @@ export default function StoryLoom() {
       try {
         const { user } = await authApi.getCurrentUser();
         setCurrentUser(user);
-        // Fetch user stats if logged in
-        if (user) {
-          try {
-            const stats = await userApi.getStats();
-            setUserStats(stats);
-          } catch (err) {
-            console.error('Failed to fetch user stats:', err);
-          }
-        }
       } catch (err) {
         // User not logged in
         setCurrentUser(null);
@@ -268,24 +245,6 @@ export default function StoryLoom() {
       setScore(0);
       setCustomPrompt('');
       setFlashcards([]);
-      
-      // Update activity tracking for logged-in users
-      if (currentUser) {
-        try {
-          const stats = await userApi.updateActivity();
-          setUserStats(prev => ({
-            ...prev,
-            storiesGenerated: stats.storiesGenerated,
-            currentStreak: stats.currentStreak,
-            longestStreak: stats.longestStreak
-          }));
-          if (stats.currentStreak > 1) {
-            toast.success(`🔥 ${stats.currentStreak} day streak!`, { duration: 2000 });
-          }
-        } catch (err) {
-          console.error('Failed to update activity:', err);
-        }
-      }
     } catch (err: any) {
       console.error('Error generating story:', err);
       setError(err.response?.data?.error || 'Failed to generate story. Please try again.');
@@ -629,89 +588,6 @@ export default function StoryLoom() {
     }
   };
 
-  // Story editing handlers
-  const handleStartEdit = () => {
-    if (!currentStory) return;
-    setEditedTitle(currentStory.title);
-    setEditedContent(currentStory.content);
-    setIsEditing(true);
-    setActiveView('edit-story');
-  };
-
-  const handleSaveEdit = async () => {
-    if (!currentLoadedStoryId || !editedTitle.trim() || !editedContent.trim()) {
-      toast.error('Title and content cannot be empty');
-      return;
-    }
-
-    setIsSavingEdit(true);
-    try {
-      const { story } = await libraryApi.updateStory(currentLoadedStoryId, {
-        title: editedTitle,
-        content: editedContent
-      });
-      
-      // Update current story
-      setCurrentStory(prev => prev ? {
-        ...prev,
-        title: story.title,
-        content: story.content
-      } : null);
-      
-      // Update in saved stories list
-      setSavedStories(prev => prev.map(s => 
-        s.id === currentLoadedStoryId ? story : s
-      ));
-      
-      setIsEditing(false);
-      setActiveView('story');
-      toast.success('Story updated successfully!');
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update story.');
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setActiveView('story');
-  };
-
-  // Story sharing handlers
-  const handleCopyStory = () => {
-    if (!currentStory) return;
-    
-    const text = `${currentStory.title}\n\n${currentStory.content}`;
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success('Story copied to clipboard!', { icon: '📋' });
-    }).catch(() => {
-      toast.error('Failed to copy story');
-    });
-  };
-
-  const handleExportText = () => {
-    if (!currentStory) return;
-    
-    const element = document.createElement('a');
-    const file = new Blob([`${currentStory.title}\n\n${currentStory.content}`], {
-      type: 'text/plain'
-    });
-    element.href = URL.createObjectURL(file);
-    element.download = `${currentStory.title.replace(/[^a-z0-9]/gi, '_')}.txt`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-    toast.success('Story exported as text file!', { icon: '📄' });
-  };
-
-  const handleExportPDF = async () => {
-    if (!currentStory) return;
-    
-    toast.error('PDF export coming soon! Use "Export Text" for now.');
-    // TODO: Implement jsPDF integration
-  };
-
   const handleDeleteStory = async (storyId: number) => {
     const confirmed = window.confirm('Are you sure you want to delete this story?');
     if (!confirmed) return;
@@ -810,14 +686,6 @@ export default function StoryLoom() {
               {/* Auth Buttons */}
               {currentUser ? (
                 <div className="flex items-center gap-3">
-                  {/* Stats Badge */}
-                  {userStats.currentStreak > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-orange-500/20 to-red-500/20 rounded-lg border border-orange-500/30">
-                      <Award className="w-4 h-4 text-orange-400" />
-                      <span className="text-orange-400 text-sm font-bold">🔥 {userStats.currentStreak}</span>
-                      <span className="text-slate-400 text-xs">day streak</span>
-                    </div>
-                  )}
                   <span className="text-slate-300 text-sm">Hi, {currentUser.username}!</span>
                   <button 
                     onClick={handleLogout}
@@ -1282,22 +1150,13 @@ export default function StoryLoom() {
                   {/* Secondary Actions - More compact */}
                   {currentUser && (
                     currentLoadedStoryId ? (
-                      <>
-                        <button 
-                          onClick={handleStartEdit}
-                          className="group bg-slate-800 border border-blue-500/30 hover:border-blue-500 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 transition-all flex items-center gap-2"
-                        >
-                          <Edit className="w-4 h-4 text-blue-400" />
-                          <span className="font-semibold text-blue-400 text-sm">Edit Story</span>
-                        </button>
-                        <button 
-                          onClick={handleDeleteStoryFromView}
-                          className="group bg-slate-800 border border-red-500/30 hover:border-red-500 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-red-500/20 transition-all flex items-center gap-2"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                          <span className="font-semibold text-red-400 text-sm">Remove from Library</span>
-                        </button>
-                      </>
+                      <button 
+                        onClick={handleDeleteStoryFromView}
+                        className="group bg-slate-800 border border-red-500/30 hover:border-red-500 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-red-500/20 transition-all flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                        <span className="font-semibold text-red-400 text-sm">Remove from Library</span>
+                      </button>
                     ) : (
                       <button 
                         onClick={handleSaveStory}
@@ -1318,31 +1177,6 @@ export default function StoryLoom() {
                       </button>
                     )
                   )}
-
-                  {/* Share Buttons */}
-                  <div className="flex gap-2 border-l border-slate-700 pl-3">
-                    <button 
-                      onClick={handleCopyStory}
-                      className="group bg-slate-800 border border-slate-700 hover:border-purple-500 p-3 rounded-xl hover:shadow-lg hover:shadow-purple-500/20 transition-all"
-                      title="Copy to clipboard"
-                    >
-                      <Copy className="w-4 h-4 text-purple-400" />
-                    </button>
-                    <button 
-                      onClick={handleExportText}
-                      className="group bg-slate-800 border border-slate-700 hover:border-cyan-500 p-3 rounded-xl hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
-                      title="Export as text file"
-                    >
-                      <FileText className="w-4 h-4 text-cyan-400" />
-                    </button>
-                    <button 
-                      onClick={handleExportPDF}
-                      className="group bg-slate-800 border border-slate-700 hover:border-indigo-500 p-3 rounded-xl hover:shadow-lg hover:shadow-indigo-500/20 transition-all"
-                      title="Export as PDF (coming soon)"
-                    >
-                      <FileDown className="w-4 h-4 text-indigo-400" />
-                    </button>
-                  </div>
 
                   <button 
                     onClick={handleNewStory}
@@ -1915,101 +1749,6 @@ export default function StoryLoom() {
                 className="text-slate-400 hover:text-white transition-colors"
               >
                 ← Back to Home
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Story View */}
-        {activeView === 'edit-story' && isEditing && currentStory && (
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-slate-800/50 backdrop-blur-md rounded-3xl p-8 border border-teal-500/20 shadow-2xl">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-3xl font-bold text-white flex items-center gap-2">
-                  <Edit className="w-8 h-8 text-blue-400" />
-                  Edit Story
-                </h2>
-                <button 
-                  onClick={handleCancelEdit}
-                  className="text-slate-400 hover:text-white transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Edit Form */}
-              <div className="space-y-6">
-                {/* Title Input */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    Story Title
-                  </label>
-                  <input
-                    type="text"
-                    value={editedTitle}
-                    onChange={(e) => setEditedTitle(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-teal-500 transition-colors"
-                    placeholder="Enter story title"
-                  />
-                </div>
-
-                {/* Content Textarea */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-300 mb-2">
-                    Story Content
-                  </label>
-                  <textarea
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                    rows={20}
-                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-teal-500 transition-colors resize-none"
-                    placeholder="Write your story here..."
-                  />
-                  <div className="mt-2 text-sm text-slate-400 flex justify-between">
-                    <span>{editedContent.length} characters</span>
-                    <span>{editedContent.split(/\s+/).filter(w => w.length > 0).length} words</span>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-4">
-                  <button
-                    onClick={handleSaveEdit}
-                    disabled={isSavingEdit || !editedTitle.trim() || !editedContent.trim()}
-                    className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-teal-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                  >
-                    {isSavingEdit ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Saving Changes...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-5 h-5" />
-                        Save Changes
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={handleCancelEdit}
-                    disabled={isSavingEdit}
-                    className="px-6 py-3 bg-slate-700 text-white rounded-xl font-semibold hover:bg-slate-600 disabled:opacity-50 transition-all"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 text-center">
-              <button 
-                onClick={() => {
-                  handleCancelEdit();
-                  setActiveView('story');
-                }}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                ← Back to Story
               </button>
             </div>
           </div>
