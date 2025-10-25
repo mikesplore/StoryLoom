@@ -234,6 +234,7 @@ export default function StoryLoom() {
         storyApi.generateQuiz({
           title: story.title,
           content: story.content,
+          ageGroup: selectedAgeGroup,
         }),
         storyApi.generateCoverImage({
           title: story.title,
@@ -1045,7 +1046,10 @@ export default function StoryLoom() {
             handleDeleteStory={handleDeleteStory}
           />
         )}
-      </main>
+  </main>
+
+  {/* Spacer for fixed footer */}
+  <div style={{ height: '80px' }} />
 
       {/* Footer */}
       <Footer />

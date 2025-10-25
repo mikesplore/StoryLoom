@@ -223,7 +223,7 @@ export default function StoryView({
         {/* Story Content - Better Typography and Spacing */}
         <div className="prose prose-lg prose-invert max-w-none mb-8">
           {(selectedLanguage !== 'en' && translatedStory ? translatedStory : currentStory.content).split('\n\n').map((paragraph, idx) => (
-            <p key={idx} className="text-slate-200 text-base sm:text-lg leading-relaxed mb-6 first-letter:text-2xl first-letter:font-bold first-letter:text-teal-400">
+            <p key={idx} className="text-slate-200 text-base sm:text-lg leading-relaxed mb-6">
               {paragraph}
             </p>
           ))}
@@ -249,7 +249,7 @@ export default function StoryView({
             <button 
               onClick={handleGenerateFlashcards}
               disabled={isGeneratingFlashcards}
-              className="flex-1 min-w-[200px] group bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-purple-500/40 transition-all hover:scale-[1.02] flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="flex-1 min-w-[200px] group bg-gradient-to-r from-green-600 to-blue-600 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-purple-500/40 transition-all hover:scale-[1.02] flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
                 {isGeneratingFlashcards ? (

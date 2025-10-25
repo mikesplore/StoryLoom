@@ -102,6 +102,7 @@ export interface GenerateStoryRequest {
 export interface GenerateQuizRequest {
   title: string;
   content: string;
+  ageGroup: AgeGroup;
 }
 
 export interface GenerateFlashcardsRequest {

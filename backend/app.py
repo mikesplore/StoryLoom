@@ -162,6 +162,12 @@ def generate_story():
             prompt = f"""Create an engaging {theme} story based on this prompt: "{custom_prompt}"
 
 The story should be:
+- Appropriate for {age_info['label']}
+- Reading level: {reading_level}
+- Length: {word_count} words
+- Use vocabulary and sentence structure suitable for this age group
+- Include age-appropriate themes and content
+- Be engaging and entertaining for the target audience
 
 Return ONLY a JSON object with this exact structure (no markdown, no code blocks):
 {{
@@ -175,6 +181,12 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
             prompt = f"""Create an original, engaging {theme} story.
 
 The story should be:
+- Appropriate for {age_info['label']}
+- Reading level: {reading_level}
+- Length: {word_count} words
+- Use vocabulary and sentence structure suitable for this age group
+- Include age-appropriate themes and content
+- Be engaging and entertaining for the target audience
 
 Return ONLY a JSON object with this exact structure (no markdown, no code blocks):
 {{
@@ -209,11 +221,20 @@ def generate_quiz():
         data = request.json
         story_title = data.get('title', '')
         story_content = data.get('content', '')
+        age_group = data.get('ageGroup', 'kids')
+        
+        age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['kids'])
         
         prompt = f"""Based on this story titled "{story_title}", create a comprehension quiz with 5 multiple-choice questions.
 
 Story:
 {story_content}
+
+The quiz should be:
+- Appropriate for {age_info['label']}
+- Use simple, clear language suitable for this age group
+- Test age-appropriate comprehension skills
+- Have questions that are neither too easy nor too difficult for this age
 
 Create questions that test understanding of:
 - Plot details and events
