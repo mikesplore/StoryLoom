@@ -155,7 +155,8 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
   "title": "Story Title",
   "genre": "{theme}",
   "content": "The full story text with multiple paragraphs separated by \\n\\n",
-  "readTime": "X min read"
+  "readTime": "X min read",
+  "imageDescription": "A detailed description of the main scene or characters for a book cover illustration. Be VERY specific about: number of characters, their appearance, what they're doing, the setting, colors, and mood. Example: 'Two golden retriever dogs playing together in a sunny garden, one dog is brown with floppy ears, the other is lighter colored, both looking happy, green grass, blue sky, flowers in background'"
 }}"""
         else:
             prompt = f"""Create an original, engaging {theme} story.
@@ -172,7 +173,8 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
   "title": "Story Title",
   "genre": "{theme}",
   "content": "The full story text with multiple paragraphs separated by \\n\\n",
-  "readTime": "X min read"
+  "readTime": "X min read",
+  "imageDescription": "A detailed description of the main scene or characters for a book cover illustration. Be VERY specific about: number of characters, their appearance, what they're doing, the setting, colors, and mood. Example: 'Two golden retriever dogs playing together in a sunny garden, one dog is brown with floppy ears, the other is lighter colored, both looking happy, green grass, blue sky, flowers in background'"
 }}"""
 
         # Generate story
@@ -364,17 +366,22 @@ def generate_cover_image():
         
         print(f"🎨 Generating cover image for: {title}")
         
-        # Create a prompt for the image based on the story
-        image_prompt = f"Book cover illustration for '{title}', {genre} story, "
+        # Create a detailed, accurate prompt for image generation
         if story_summary:
-            image_prompt += f"{story_summary[:100]}, "
-        image_prompt += "beautiful, detailed, professional book cover art, vibrant colors, digital painting"
+            # Use the detailed description if provided
+            image_prompt = f"{story_summary}. Professional children's book cover illustration, storybook art style, vibrant colors, detailed, high quality"
+        else:
+            # Fallback to basic prompt
+            image_prompt = f"Book cover illustration: '{title}', {genre} genre story. Beautiful detailed professional children's book cover art, storybook illustration style, vibrant colors, perfect composition"
         
-        # Use Hugging Face's Stable Diffusion API - try multiple reliable models
+        print(f"🖼️ Image prompt: {image_prompt[:250]}...")
+        
+        # Use Hugging Face's best image generation models for accuracy
+        # These models are better at following prompts accurately
         models = [
-            "runwayml/stable-diffusion-v1-5",           # Most reliable, widely used
+            "black-forest-labs/FLUX.1-schnell",         # Fast, accurate, excellent at prompt following
             "stabilityai/stable-diffusion-xl-base-1.0", # High quality SDXL
-            "stabilityai/stable-diffusion-2-1",         # SD 2.1
+            "runwayml/stable-diffusion-v1-5",           # Reliable fallback
         ]
         
         # Get Hugging Face API key from environment

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { BookOpen, Sparkles, Play, CheckCircle, XCircle, RotateCcw, Menu, X, Loader2, GraduationCap, Languages, FlipHorizontal, Volume2, VolumeX, Pause } from 'lucide-react';
 import { storyApi } from './services/api';
 import type { Theme, StoryWithQuiz, ViewType, AgeGroup, AgeGroupInfo, Flashcard } from './types';
@@ -170,7 +170,7 @@ export default function StoryLoom() {
         storyApi.generateCoverImage({
           title: story.title,
           genre: story.genre,
-          summary: story.content.substring(0, 200), // First 200 chars as summary
+          summary: (story as any).imageDescription || story.content.substring(0, 200), // Use AI-generated description or fallback
         }).catch(err => {
           console.warn('Cover image generation failed:', err);
           return { imageData: null, fallback: true };
@@ -184,7 +184,7 @@ export default function StoryLoom() {
         console.log('🎯 Image data length:', coverImageResult.imageData.length);
         console.log('🔍 Image data preview:', coverImageResult.imageData.substring(0, 50));
       }
-      if (coverImageResult.error) {
+      if ('error' in coverImageResult && coverImageResult.error) {
         console.log('⚠️ Image generation error:', coverImageResult.error);
       }
       
@@ -820,42 +820,65 @@ export default function StoryLoom() {
               <p className="text-slate-300">Card {currentFlashcardIndex + 1} of {flashcards.length}</p>
             </div>
 
-            <div className="perspective-1000">
+            {/* Flashcard with 3D Flip */}
+            <div className="relative" style={{ perspective: '1000px' }}>
               <div 
                 onClick={flipFlashcard}
-                className={`relative bg-slate-800/50 backdrop-blur-sm border-2 border-teal-500/20 rounded-2xl p-8 cursor-pointer transition-all duration-500 transform hover:scale-105 ${showFlashcardAnswer ? 'rotate-y-180' : ''}`}
-                style={{ minHeight: '300px', transformStyle: 'preserve-3d' }}
+                className="relative cursor-pointer transition-transform duration-700 ease-in-out"
+                style={{ 
+                  transformStyle: 'preserve-3d',
+                  transform: showFlashcardAnswer ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                  minHeight: '300px'
+                }}
               >
-                {!showFlashcardAnswer ? (
-                  <div className="text-center">
-                    <FlipHorizontal className="w-12 h-12 text-teal-400 mx-auto mb-4" />
+                {/* Front of Card */}
+                <div 
+                  className="absolute inset-0 bg-gradient-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-sm border-2 border-teal-500/30 rounded-2xl p-8 shadow-xl hover:shadow-2xl hover:border-teal-500/50 transition-all"
+                  style={{ 
+                    backfaceVisibility: 'hidden',
+                    WebkitBackfaceVisibility: 'hidden'
+                  }}
+                >
+                  <div className="flex flex-col items-center justify-center h-full min-h-[300px]">
+                    <FlipHorizontal className="w-12 h-12 text-teal-400 mx-auto mb-6 animate-pulse" />
                     <h3 className="text-4xl font-bold text-white mb-4">
                       {selectedLanguage !== 'en' && translatedFlashcards.length > 0
                         ? translatedFlashcards[currentFlashcardIndex].word
                         : flashcards[currentFlashcardIndex].word}
                     </h3>
-                    <p className="text-slate-400">Click to see meaning</p>
+                    <p className="text-slate-400 text-sm">Tap to reveal meaning</p>
                   </div>
-                ) : (
-                  <div className="text-center transform rotate-y-180">
-                    <div className="mb-6">
-                      <h4 className="text-teal-300 font-semibold mb-2">Meaning:</h4>
-                      <p className="text-xl text-white mb-4">
+                </div>
+
+                {/* Back of Card */}
+                <div 
+                  className="absolute inset-0 bg-gradient-to-br from-teal-900/90 to-cyan-900/90 backdrop-blur-sm border-2 border-cyan-500/30 rounded-2xl p-8 shadow-xl"
+                  style={{ 
+                    backfaceVisibility: 'hidden',
+                    WebkitBackfaceVisibility: 'hidden',
+                    transform: 'rotateY(180deg)'
+                  }}
+                >
+                  <div className="flex flex-col items-center justify-center h-full min-h-[300px] space-y-6">
+                    <div className="text-center">
+                      <h4 className="text-teal-200 font-semibold mb-2 uppercase text-sm tracking-wider">Meaning</h4>
+                      <p className="text-2xl text-white font-medium mb-6">
                         {selectedLanguage !== 'en' && translatedFlashcards.length > 0
                           ? translatedFlashcards[currentFlashcardIndex].definition
                           : flashcards[currentFlashcardIndex].definition}
                       </p>
                     </div>
-                    <div>
-                      <h4 className="text-cyan-300 font-semibold mb-2">Example:</h4>
-                      <p className="text-lg text-slate-300 italic">
+                    <div className="text-center border-t border-cyan-400/20 pt-6 w-full">
+                      <h4 className="text-cyan-200 font-semibold mb-2 uppercase text-sm tracking-wider">Example</h4>
+                      <p className="text-lg text-slate-200 italic">
                         "{selectedLanguage !== 'en' && translatedFlashcards.length > 0
                           ? translatedFlashcards[currentFlashcardIndex].example
                           : flashcards[currentFlashcardIndex].example}"
                       </p>
                     </div>
+                    <p className="text-slate-300 text-sm mt-4">Tap to flip back</p>
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
