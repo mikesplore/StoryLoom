@@ -279,8 +279,9 @@ export default function StoryView({
               ) : (
                 <button 
                   onClick={handleSaveStory}
-                  disabled={isSavingStory}
+                  disabled={isSavingStory || !!currentLoadedStoryId}
                   className="group bg-slate-800 border border-emerald-500/30 hover:border-emerald-500 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                  title={currentLoadedStoryId ? 'Already saved' : undefined}
                 >
                   {isSavingStory ? (
                     <>

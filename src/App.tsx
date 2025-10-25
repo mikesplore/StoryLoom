@@ -220,7 +220,13 @@ export default function StoryLoom() {
         ageGroup: selectedAgeGroup,
         prompt: customPrompt.trim() || undefined,
       });
-      
+      // Update stats after generating a story
+      try {
+        const stats = await userApi.updateActivity();
+        setUserStats((prev) => ({ ...prev, ...stats }));
+      } catch (err) {
+        console.warn('Failed to update user stats after generating story:', err);
+      }
       // Generate cover image in parallel with quiz
       setIsGeneratingImage(true);
       console.log('🎨 Starting cover image generation...');
@@ -554,16 +560,27 @@ export default function StoryLoom() {
       setActiveView('login');
       return;
     }
-    
     if (!currentStory) return;
-    
+    if (currentLoadedStoryId) {
+      toast('This story is already saved in your library.', { icon: '📚' });
+      return;
+    }
     setIsSavingStory(true);
     try {
-      await libraryApi.saveStory({
+      const { story } = await libraryApi.saveStory({
         ...currentStory,
         ageGroup: selectedAgeGroup,
         coverImage: coverImage || undefined,
       });
+      setCurrentLoadedStoryId(story.id);
+      setSavedStories((prev) => [...prev, story]);
+      // Update stats after saving a story
+      try {
+        const stats = await userApi.getStats();
+        setUserStats(stats);
+      } catch (err) {
+        console.warn('Failed to update user stats after saving story:', err);
+      }
       toast.success('Story saved to your library!', {
         icon: '📚',
         duration: 3000,

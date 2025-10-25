@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
-import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 import json
@@ -15,6 +14,7 @@ import base64
 from PIL import Image
 from datetime import datetime
 from models import db, User, Story
+from ai_providers import AIProviderManager
 
 # Load environment variables from parent directory
 env_path = Path(__file__).parent.parent / '.env'
@@ -36,17 +36,13 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Configure Gemini API
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if not GEMINI_API_KEY:
-    print("ERROR: GEMINI_API_KEY not found in environment variables")
-    print(f"Looking for .env at: {env_path}")
-    print(f".env exists: {env_path.exists()}")
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
-
-print(f"✅ Gemini API key loaded (length: {len(GEMINI_API_KEY)})")
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash')
+# Initialize AI Provider Manager (supports multiple providers with fallback)
+try:
+    ai_manager = AIProviderManager()
+    print(f"🚀 AI System ready with {ai_manager.get_current_provider()} as primary provider")
+except Exception as e:
+    print(f"❌ Failed to initialize AI providers: {e}")
+    raise
 
 # Story themes/genres
 THEMES = [
@@ -120,8 +116,13 @@ def clean_json_response(text):
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({'status': 'healthy', 'message': 'Backend is running'})
+    """Health check endpoint with AI provider info"""
+    return jsonify({
+        'status': 'healthy',
+        'message': 'Backend is running',
+        'ai_provider': ai_manager.get_current_provider(),
+        'available_providers': [p.name for p in ai_manager.available_providers]
+    })
 
 
 @app.route('/api/themes', methods=['GET'])
@@ -185,12 +186,11 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
 }}"""
 
         # Generate story
-        response = model.generate_content(prompt)
-        story_text = response.text
+        response_text = ai_manager.generate_content(prompt)
         
         
         # Clean and parse JSON
-        cleaned_text = clean_json_response(story_text)
+        cleaned_text = clean_json_response(response_text)
         
         story_data = json.loads(cleaned_text)
         
@@ -235,8 +235,7 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
 The "correct" field should be the index (0-3) of the correct answer in the options array."""
 
         # Generate quiz
-        response = model.generate_content(prompt)
-        quiz_text = response.text
+        quiz_text = ai_manager.generate_content(prompt)
         
         # Clean and parse JSON
         cleaned_text = clean_json_response(quiz_text)
@@ -246,7 +245,7 @@ The "correct" field should be the index (0-3) of the correct answer in the optio
     
     except json.JSONDecodeError as e:
         print(f"JSON decode error: {e}")
-        print(f"Response text: {response.text}")
+        print(f"Response text: {quiz_text}")
         return jsonify({'error': 'Failed to parse quiz data', 'details': str(e)}), 500
     except Exception as e:
         print(f"Error generating quiz: {e}")
@@ -288,8 +287,7 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
 
         # Generate flashcards
         print("🃏 Generating flashcards...")
-        response = model.generate_content(prompt)
-        flashcard_text = response.text
+        flashcard_text = ai_manager.generate_content(prompt)
         
         # Clean and parse JSON
         cleaned_text = clean_json_response(flashcard_text)
