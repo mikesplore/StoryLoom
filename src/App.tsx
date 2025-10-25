@@ -1769,6 +1769,15 @@ export default function StoryLoom() {
               Google Gemini
             </a>
             <span className="hidden sm:inline">•</span>
+            <a
+              href="https://huggingface.co/CompVis/stable-diffusion-v1-5"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-yellow-400 hover:text-yellow-300 font-semibold transition-colors"
+            >
+              Hugging Face Stable Diffusion
+            </a>
+            <span className="hidden sm:inline">•</span>
             <span>Developed by</span>
             <a 
               href="https://github.com/mikesplore" 
