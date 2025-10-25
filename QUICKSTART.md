@@ -13,10 +13,7 @@
 2. Paste your API key after `GEMINI_API_KEY=`
 3. Save the file
 
-Example:
-```
-GEMINI_API_KEY=AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY
-```
+
 
 ### Step 3: Run Setup (Automated)
 ```bash
@@ -66,6 +63,7 @@ pip install -r requirements.txt
 ```bash
 # Make sure virtual environment is activated
 cd backend
+python3 -m venv venv
 source venv/bin/activate
 python app.py
 ```

@@ -6,6 +6,36 @@ export interface Story {
   coverImage?: string; // Base64 image data
 }
 
+export interface SavedStory extends Story {
+  id: number;
+  ageGroup: AgeGroup;
+  questions: Question[];
+  flashcards: Flashcard[];
+  createdAt: string;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+}
+
+export interface AuthResponse {
+  message: string;
+  user: User;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+}
+
 export interface Question {
   question: string;
   options: string[];
@@ -90,4 +120,4 @@ export interface CoverImageResponse {
   fallback?: boolean;
 }
 
-export type ViewType = 'home' | 'story' | 'quiz' | 'results' | 'flashcards';
+export type ViewType = 'home' | 'story' | 'quiz' | 'results' | 'flashcards' | 'library' | 'login' | 'register';

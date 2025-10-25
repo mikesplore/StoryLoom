@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { BookOpen, Sparkles, Play, CheckCircle, XCircle, RotateCcw, Menu, X, Loader2, GraduationCap, Languages, FlipHorizontal, Volume2, VolumeX, Pause } from 'lucide-react';
-import { storyApi } from './services/api';
-import type { Theme, StoryWithQuiz, ViewType, AgeGroup, AgeGroupInfo, Flashcard } from './types';
+import { BookOpen, Sparkles, Play, CheckCircle, XCircle, RotateCcw, Menu, X, Loader2, GraduationCap, Languages, FlipHorizontal, Volume2, VolumeX, Pause, Save, Library, LogIn, LogOut, UserPlus, Trash2, Key } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
+import { storyApi, authApi, libraryApi } from './services/api';
+import type { Theme, StoryWithQuiz, ViewType, AgeGroup, AgeGroupInfo, Flashcard, User, SavedStory } from './types';
 
 export default function StoryLoom() {
   const [activeView, setActiveView] = useState<ViewType>('home');
@@ -11,6 +12,28 @@ export default function StoryLoom() {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
+  
+  // Authentication state
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  
+  // Password recovery state
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [isRecovering, setIsRecovering] = useState(false);
+  
+  // Library state
+  const [savedStories, setSavedStories] = useState<SavedStory[]>([]);
+  const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  const [isSavingStory, setIsSavingStory] = useState(false);
+  const [currentLoadedStoryId, setCurrentLoadedStoryId] = useState<number | null>(null);
   
   // Story generation form state
   const [selectedTheme, setSelectedTheme] = useState<Theme>('Mystery');
@@ -65,6 +88,20 @@ export default function StoryLoom() {
       }
     };
     fetchOptions();
+    
+    // Check authentication status
+    const checkAuth = async () => {
+      try {
+        const { user } = await authApi.getCurrentUser();
+        setCurrentUser(user);
+      } catch (err) {
+        // User not logged in
+        setCurrentUser(null);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+    checkAuth();
     
     // Load available voices for text-to-speech
     const loadVoices = () => {
@@ -365,6 +402,7 @@ export default function StoryLoom() {
     setTranslatedQuiz([]);
     setTranslatedFlashcards([]);
     setCoverImage(null);
+    setCurrentLoadedStoryId(null);
   };
 
   const flipFlashcard = () => {
@@ -385,8 +423,225 @@ export default function StoryLoom() {
     }
   };
 
+  // Authentication handlers
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAuthenticating(true);
+    setAuthError(null);
+    
+    try {
+      const { user } = await authApi.login({
+        username: loginUsername,
+        password: loginPassword,
+      });
+      setCurrentUser(user);
+      setLoginUsername('');
+      setLoginPassword('');
+      setActiveView('home');
+      toast.success(`Welcome back, ${user.username}!`);
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || 'Login failed. Please try again.';
+      setAuthError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAuthenticating(true);
+    setAuthError(null);
+    
+    try {
+      const { user } = await authApi.register({
+        username: registerUsername,
+        email: registerEmail,
+        password: registerPassword,
+      });
+      setCurrentUser(user);
+      setRegisterUsername('');
+      setRegisterEmail('');
+      setRegisterPassword('');
+      setActiveView('home');
+      toast.success(`Account created! Welcome, ${user.username}!`);
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || 'Registration failed. Please try again.';
+      setAuthError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handlePasswordRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsRecovering(true);
+    
+    // Simulate password recovery (you'll need to implement backend endpoint)
+    setTimeout(() => {
+      toast.success('Password recovery email sent! Check your inbox.');
+      setRecoveryEmail('');
+      setShowPasswordRecovery(false);
+      setIsRecovering(false);
+    }, 1500);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+      setCurrentUser(null);
+      setActiveView('home');
+      setCurrentStory(null);
+      setSavedStories([]);
+      toast.success('Logged out successfully');
+    } catch (err) {
+      console.error('Logout failed:', err);
+      toast.error('Failed to logout');
+    }
+  };
+
+  // Library handlers
+  const handleLoadLibrary = async () => {
+    if (!currentUser) {
+      toast.error('Please login to view your library');
+      setActiveView('login');
+      return;
+    }
+    
+    setIsLoadingLibrary(true);
+    try {
+      const { stories } = await libraryApi.getStories();
+      setSavedStories(stories);
+      setActiveView('library');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || 'Failed to load library.';
+      setError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsLoadingLibrary(false);
+    }
+  };
+
+  const handleSaveStory = async () => {
+    if (!currentUser) {
+      toast.error('Please login to save stories');
+      setActiveView('login');
+      return;
+    }
+    
+    if (!currentStory) return;
+    
+    setIsSavingStory(true);
+    try {
+      await libraryApi.saveStory({
+        ...currentStory,
+        ageGroup: selectedAgeGroup,
+        coverImage: coverImage || undefined,
+      });
+      toast.success('Story saved to your library!', {
+        icon: '📚',
+        duration: 3000,
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to save story.');
+    } finally {
+      setIsSavingStory(false);
+    }
+  };
+
+  const handleLoadSavedStory = async (storyId: number) => {
+    try {
+      const { story } = await libraryApi.getStory(storyId);
+      setCurrentStory({
+        title: story.title,
+        genre: story.genre,
+        content: story.content,
+        readTime: story.readTime,
+        questions: story.questions,
+      });
+      setSelectedAgeGroup(story.ageGroup as AgeGroup);
+      setCoverImage(story.coverImage || null);
+      setFlashcards(story.flashcards);
+      setCurrentLoadedStoryId(storyId);
+      setActiveView('story');
+      toast.success('Story loaded!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to load story.');
+    }
+  };
+
+  const handleDeleteStoryFromView = async () => {
+    if (!currentLoadedStoryId) return;
+    
+    const confirmed = window.confirm('Remove this story from your library?');
+    if (!confirmed) return;
+    
+    try {
+      await libraryApi.deleteStory(currentLoadedStoryId);
+      setSavedStories(savedStories.filter(s => s.id !== currentLoadedStoryId));
+      setCurrentLoadedStoryId(null);
+      toast.success('Story removed from library', { icon: '🗑️' });
+      handleNewStory();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to remove story.');
+    }
+  };
+
+  const handleDeleteStory = async (storyId: number) => {
+    const confirmed = window.confirm('Are you sure you want to delete this story?');
+    if (!confirmed) return;
+    
+    try {
+      await libraryApi.deleteStory(storyId);
+      setSavedStories(savedStories.filter(s => s.id !== storyId));
+      toast.success('Story deleted', {
+        icon: '🗑️',
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to delete story.');
+    }
+  };
+
+  // Show loading screen while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-teal-400 mx-auto mb-4" />
+          <p className="text-slate-400">Loading StoryLoom...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-teal-900">
+      {/* Toast Notifications */}
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#1e293b',
+            color: '#fff',
+            border: '1px solid rgba(20, 184, 166, 0.2)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#14b8a6',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+      
       {/* Header */}
       <header className="bg-slate-900/50 backdrop-blur-md border-b border-teal-500/20 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
@@ -401,7 +656,12 @@ export default function StoryLoom() {
             {/* Desktop Nav */}
             <nav className="hidden md:flex gap-6 items-center">
               <button onClick={handleNewStory} className="text-teal-300 hover:text-teal-200 transition-colors">Home</button>
-              <button className="text-slate-300 hover:text-white transition-colors">About</button>
+              {currentUser && (
+                <button onClick={handleLoadLibrary} className="text-teal-300 hover:text-teal-200 transition-colors flex items-center gap-1">
+                  <Library className="w-4 h-4" />
+                  My Library
+                </button>
+              )}
               
               {/* Global Language Selector */}
               {currentStory && (
@@ -422,6 +682,37 @@ export default function StoryLoom() {
                   {isTranslating && <Loader2 className="w-4 h-4 animate-spin text-teal-400" />}
                 </div>
               )}
+              
+              {/* Auth Buttons */}
+              {currentUser ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-slate-300 text-sm">Hi, {currentUser.username}!</span>
+                  <button 
+                    onClick={handleLogout}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all text-sm"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setActiveView('login')}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all text-sm"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Login
+                  </button>
+                  <button 
+                    onClick={() => setActiveView('register')}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-all text-sm"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Sign Up
+                  </button>
+                </div>
+              )}
             </nav>
 
             {/* Mobile Menu Button */}
@@ -434,7 +725,13 @@ export default function StoryLoom() {
           {menuOpen && (
             <nav className="md:hidden mt-4 pb-4 flex flex-col gap-3 border-t border-teal-500/20 pt-4">
               <button onClick={() => {handleNewStory(); setMenuOpen(false);}} className="text-teal-300 hover:text-teal-200 transition-colors text-left">Home</button>
-              <button className="text-slate-300 hover:text-white transition-colors text-left">About</button>
+              
+              {currentUser && (
+                <button onClick={() => {handleLoadLibrary(); setMenuOpen(false);}} className="text-teal-300 hover:text-teal-200 transition-colors text-left flex items-center gap-1">
+                  <Library className="w-4 h-4" />
+                  My Library
+                </button>
+              )}
               
               {/* Mobile Language Selector */}
               {currentStory && (
@@ -455,6 +752,39 @@ export default function StoryLoom() {
                   {isTranslating && <Loader2 className="w-4 h-4 animate-spin text-teal-400" />}
                 </div>
               )}
+              
+              {/* Mobile Auth Buttons */}
+              <div className="pt-3 border-t border-teal-500/20">
+                {currentUser ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="text-slate-300 text-sm px-3">Hi, {currentUser.username}!</div>
+                    <button 
+                      onClick={() => {handleLogout(); setMenuOpen(false);}}
+                      className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all text-sm"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Logout
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <button 
+                      onClick={() => {setActiveView('login'); setMenuOpen(false);}}
+                      className="flex items-center gap-2 px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all text-sm"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Login
+                    </button>
+                    <button 
+                      onClick={() => {setActiveView('register'); setMenuOpen(false);}}
+                      className="flex items-center gap-2 px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-all text-sm"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Sign Up
+                    </button>
+                  </div>
+                )}
+              </div>
             </nav>
           )}
         </div>
@@ -780,33 +1110,82 @@ export default function StoryLoom() {
                 ))}
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-teal-500/20">
-                <button 
-                  onClick={handleStartQuiz}
-                  className="flex-1 bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 px-6 py-3 rounded-xl font-semibold hover:shadow-lg hover:shadow-teal-500/50 transition-all inline-flex items-center justify-center gap-2"
-                >
-                  <Play className="w-5 h-5" />
-                  Take Quiz
-                </button>
-                <button 
-                  onClick={handleGenerateFlashcards}
-                  disabled={isGeneratingFlashcards}
-                  className="flex-1 bg-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-purple-700 transition-all inline-flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isGeneratingFlashcards ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <GraduationCap className="w-5 h-5" />
+              {/* Action Buttons - Compact & Creative */}
+              <div className="mt-8 pt-6 border-t border-teal-500/20">
+                <div className="flex flex-wrap gap-3">
+                  {/* Primary Actions - Side by Side */}
+                  <button 
+                    onClick={handleStartQuiz}
+                    className="flex-1 min-w-[200px] group bg-gradient-to-r from-teal-500 to-cyan-500 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-teal-500/40 transition-all hover:scale-[1.02] flex items-center gap-3"
+                  >
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Play className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold text-slate-900">Take Quiz</div>
+                      <div className="text-xs text-slate-800">Test your knowledge</div>
+                    </div>
+                  </button>
+
+                  <button 
+                    onClick={handleGenerateFlashcards}
+                    disabled={isGeneratingFlashcards}
+                    className="flex-1 min-w-[200px] group bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-purple-500/40 transition-all hover:scale-[1.02] flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  >
+                    <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      {isGeneratingFlashcards ? (
+                        <Loader2 className="w-5 h-5 text-white animate-spin" />
+                      ) : (
+                        <GraduationCap className="w-5 h-5 text-white" />
+                      )}
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold text-white">
+                        {isGeneratingFlashcards ? 'Creating...' : 'Flashcards'}
+                      </div>
+                      <div className="text-xs text-purple-100">Learn vocabulary</div>
+                    </div>
+                  </button>
+
+                  {/* Secondary Actions - More compact */}
+                  {currentUser && (
+                    currentLoadedStoryId ? (
+                      <button 
+                        onClick={handleDeleteStoryFromView}
+                        className="group bg-slate-800 border border-red-500/30 hover:border-red-500 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-red-500/20 transition-all flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                        <span className="font-semibold text-red-400 text-sm">Remove from Library</span>
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={handleSaveStory}
+                        disabled={isSavingStory}
+                        className="group bg-slate-800 border border-emerald-500/30 hover:border-emerald-500 px-4 py-3.5 rounded-xl hover:shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isSavingStory ? (
+                          <>
+                            <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+                            <span className="font-semibold text-emerald-400 text-sm">Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 text-emerald-400" />
+                            <span className="font-semibold text-emerald-400 text-sm">Save to Library</span>
+                          </>
+                        )}
+                      </button>
+                    )
                   )}
-                  Learn Words
-                </button>
-                <button 
-                  onClick={handleNewStory}
-                  className="flex-1 bg-slate-700/50 text-white px-6 py-3 rounded-xl font-semibold hover:bg-slate-700 transition-all"
-                >
-                  New Story
-                </button>
+
+                  <button 
+                    onClick={handleNewStory}
+                    className="group bg-slate-800 border border-slate-700 hover:border-slate-600 px-4 py-3.5 rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 text-slate-300" />
+                    <span className="font-semibold text-white text-sm">New Story</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1020,6 +1399,357 @@ export default function StoryLoom() {
                   New Story
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Login View */}
+        {activeView === 'login' && (
+          <div className="max-w-md mx-auto">
+            <div className="bg-slate-800/50 backdrop-blur-sm border border-teal-500/20 rounded-2xl p-8">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-full mx-auto flex items-center justify-center mb-4">
+                  <LogIn className="w-8 h-8 text-slate-900" />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-2">Welcome Back!</h2>
+                <p className="text-slate-400">Login to access your story library</p>
+              </div>
+
+              {authError && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                  {authError}
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div>
+                  <label className="block text-teal-300 font-semibold mb-2">Username</label>
+                  <input
+                    type="text"
+                    value={loginUsername}
+                    onChange={(e) => setLoginUsername(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-teal-500/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors"
+                    placeholder="Enter your username"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-teal-300 font-semibold mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-teal-500/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors"
+                    placeholder="Enter your password"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isAuthenticating}
+                  className="w-full bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 px-6 py-3 rounded-xl font-semibold hover:shadow-xl hover:shadow-teal-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isAuthenticating ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Logging in...
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-5 h-5" />
+                      Login
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center space-y-3">
+                <button 
+                  onClick={() => setShowPasswordRecovery(true)}
+                  className="text-sm text-teal-400 hover:text-teal-300 transition-colors flex items-center justify-center gap-1 mx-auto"
+                >
+                  <Key className="w-4 h-4" />
+                  Forgot password?
+                </button>
+                
+                <p className="text-slate-400">
+                  Don't have an account?{' '}
+                  <button 
+                    onClick={() => setActiveView('register')}
+                    className="text-teal-400 hover:text-teal-300 font-semibold transition-colors"
+                  >
+                    Sign up here
+                  </button>
+                </p>
+              </div>
+
+              <div className="mt-6">
+                <button 
+                  onClick={handleNewStory}
+                  className="w-full text-slate-400 hover:text-white transition-colors text-sm"
+                >
+                  ← Back to Home
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Password Recovery Modal */}
+        {showPasswordRecovery && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 border border-teal-500/20 rounded-2xl p-8 max-w-md w-full relative">
+              <button 
+                onClick={() => {
+                  setShowPasswordRecovery(false);
+                  setRecoveryEmail('');
+                }}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-teal-500/20 rounded-full mx-auto flex items-center justify-center mb-4">
+                  <Key className="w-8 h-8 text-teal-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">Reset Password</h2>
+                <p className="text-slate-400 text-sm">Enter your email to receive a password reset link</p>
+              </div>
+
+              <form onSubmit={handlePasswordRecovery} className="space-y-4">
+                <div>
+                  <label className="block text-teal-300 font-semibold mb-2">Email Address</label>
+                  <input
+                    type="email"
+                    value={recoveryEmail}
+                    onChange={(e) => setRecoveryEmail(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-teal-500/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors"
+                    placeholder="your@email.com"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isRecovering}
+                  className="w-full bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 px-6 py-3 rounded-xl font-semibold hover:shadow-xl hover:shadow-teal-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isRecovering ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-5 h-5" />
+                      Send Reset Link
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Register View */}
+        {activeView === 'register' && (
+          <div className="max-w-md mx-auto">
+            <div className="bg-slate-800/50 backdrop-blur-sm border border-teal-500/20 rounded-2xl p-8">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-gradient-to-br from-cyan-400 to-teal-500 rounded-full mx-auto flex items-center justify-center mb-4">
+                  <UserPlus className="w-8 h-8 text-slate-900" />
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-2">Create Account</h2>
+                <p className="text-slate-400">Join to save and access your stories</p>
+              </div>
+
+              {authError && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                  {authError}
+                </div>
+              )}
+
+              <form onSubmit={handleRegister} className="space-y-5">
+                <div>
+                  <label className="block text-teal-300 font-semibold mb-2">Username</label>
+                  <input
+                    type="text"
+                    value={registerUsername}
+                    onChange={(e) => setRegisterUsername(e.target.value)}
+                    required
+                    minLength={3}
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-teal-500/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors"
+                    placeholder="Choose a username (min 3 chars)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-teal-300 font-semibold mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={registerEmail}
+                    onChange={(e) => setRegisterEmail(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-teal-500/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors"
+                    placeholder="Your email address"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-teal-300 font-semibold mb-2">Password</label>
+                  <input
+                    type="password"
+                    value={registerPassword}
+                    onChange={(e) => setRegisterPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="w-full px-4 py-3 bg-slate-700/50 border border-teal-500/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 transition-colors"
+                    placeholder="Create a password (min 6 chars)"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isAuthenticating}
+                  className="w-full bg-gradient-to-r from-cyan-500 to-teal-500 text-slate-900 px-6 py-3 rounded-xl font-semibold hover:shadow-xl hover:shadow-cyan-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isAuthenticating ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Creating account...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-5 h-5" />
+                      Sign Up
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <p className="text-slate-400">
+                  Already have an account?{' '}
+                  <button 
+                    onClick={() => setActiveView('login')}
+                    className="text-teal-400 hover:text-teal-300 font-semibold transition-colors"
+                  >
+                    Login here
+                  </button>
+                </p>
+              </div>
+
+              <div className="mt-6">
+                <button 
+                  onClick={handleNewStory}
+                  className="w-full text-slate-400 hover:text-white transition-colors text-sm"
+                >
+                  ← Back to Home
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Library View */}
+        {activeView === 'library' && (
+          <div>
+            <div className="mb-8">
+              <h2 className="text-4xl font-bold text-white mb-2">My Library</h2>
+              <p className="text-slate-400">Your saved stories collection</p>
+            </div>
+
+            {isLoadingLibrary ? (
+              <div className="text-center py-20">
+                <Loader2 className="w-12 h-12 animate-spin text-teal-400 mx-auto mb-4" />
+                <p className="text-slate-400">Loading your library...</p>
+              </div>
+            ) : savedStories.length === 0 ? (
+              <div className="text-center py-20">
+                <div className="w-24 h-24 bg-slate-800/50 rounded-full mx-auto flex items-center justify-center mb-6">
+                  <Library className="w-12 h-12 text-slate-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">No stories yet</h3>
+                <p className="text-slate-400 mb-6">Generate and save stories to build your library</p>
+                <button 
+                  onClick={handleNewStory}
+                  className="bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 px-8 py-3 rounded-xl font-semibold hover:shadow-lg hover:shadow-teal-500/50 transition-all inline-flex items-center gap-2"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Create First Story
+                </button>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {savedStories.map((story) => (
+                  <div 
+                    key={story.id}
+                    className="bg-slate-800/50 backdrop-blur-sm border border-teal-500/20 rounded-2xl overflow-hidden hover:border-teal-500/40 transition-all group cursor-pointer"
+                    onClick={() => handleLoadSavedStory(story.id)}
+                  >
+                    {/* Cover Image */}
+                    {story.coverImage ? (
+                      <div className="relative h-64 bg-gradient-to-br from-slate-700 to-slate-800 overflow-hidden">
+                        <img 
+                          src={story.coverImage} 
+                          alt={story.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
+                      </div>
+                    ) : (
+                      <div className="h-64 bg-gradient-to-br from-teal-600 to-cyan-600 flex items-center justify-center">
+                        <BookOpen className="w-16 h-16 text-white/50" />
+                      </div>
+                    )}
+
+                    {/* Content */}
+                    <div className="p-6">
+                      <h3 className="text-xl font-bold text-white mb-2 group-hover:text-teal-400 transition-colors">
+                        {story.title}
+                      </h3>
+                      <div className="flex items-center gap-2 text-sm text-slate-400 mb-4">
+                        <span className="px-2 py-1 bg-teal-500/20 text-teal-400 rounded">
+                          {story.genre}
+                        </span>
+                        <span>{story.readTime}</span>
+                      </div>
+                      <p className="text-slate-400 text-sm mb-4 line-clamp-2">
+                        {story.content.substring(0, 100)}...
+                      </p>
+                      
+                      {/* Actions */}
+                      <div className="flex items-center justify-between pt-4 border-t border-teal-500/20">
+                        <span className="text-xs text-slate-500">
+                          {new Date(story.createdAt).toLocaleDateString()}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteStory(story.id);
+                          }}
+                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all"
+                          title="Delete story"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-8 text-center">
+              <button 
+                onClick={handleNewStory}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                ← Back to Home
+              </button>
             </div>
           </div>
         )}

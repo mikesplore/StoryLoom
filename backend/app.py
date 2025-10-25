@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_bcrypt import Bcrypt
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -11,13 +13,27 @@ import requests
 import io
 import base64
 from PIL import Image
+from models import db, User, Story
 
 # Load environment variables from parent directory
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 app = Flask(__name__)
-CORS(app)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this-in-production')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///storyloom.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize extensions
+CORS(app, supports_credentials=True)
+db.init_app(app)
+bcrypt = Bcrypt(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 # Configure Gemini API
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -463,5 +479,201 @@ def generate_cover_image():
         }), 200  # Return 200 so frontend can handle gracefully
 
 
+# ============================================
+# AUTHENTICATION ENDPOINTS
+# ============================================
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """Register a new user"""
+    try:
+        data = request.json
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        
+        if not username or not email or not password:
+            return jsonify({'error': 'All fields are required'}), 400
+        
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            return jsonify({'error': 'Username already exists'}), 400
+        
+        if User.query.filter_by(email=email).first():
+            return jsonify({'error': 'Email already exists'}), 400
+        
+        # Create new user
+        password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        new_user = User(username=username, email=email, password_hash=password_hash)
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        # Log the user in
+        login_user(new_user)
+        
+        return jsonify({
+            'message': 'Registration successful',
+            'user': {
+                'id': new_user.id,
+                'username': new_user.username,
+                'email': new_user.email
+            }
+        }), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Registration error: {e}")
+        return jsonify({'error': 'Registration failed'}), 500
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Login user"""
+    try:
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({'error': 'Username and password required'}), 400
+        
+        user = User.query.filter_by(username=username).first()
+        
+        if not user or not bcrypt.check_password_hash(user.password_hash, password):
+            return jsonify({'error': 'Invalid username or password'}), 401
+        
+        login_user(user)
+        
+        return jsonify({
+            'message': 'Login successful',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email
+            }
+        }), 200
+    
+    except Exception as e:
+        print(f"Login error: {e}")
+        return jsonify({'error': 'Login failed'}), 500
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+@login_required
+def logout():
+    """Logout user"""
+    logout_user()
+    return jsonify({'message': 'Logout successful'}), 200
+
+
+@app.route('/api/auth/user', methods=['GET'])
+@login_required
+def get_current_user():
+    """Get current logged in user"""
+    return jsonify({
+        'user': {
+            'id': current_user.id,
+            'username': current_user.username,
+            'email': current_user.email
+        }
+    }), 200
+
+
+# ============================================
+# STORY LIBRARY ENDPOINTS
+# ============================================
+
+@app.route('/api/library/stories', methods=['GET'])
+@login_required
+def get_user_stories():
+    """Get all stories for the current user"""
+    try:
+        stories = Story.query.filter_by(user_id=current_user.id).order_by(Story.created_at.desc()).all()
+        return jsonify({
+            'stories': [story.to_dict() for story in stories]
+        }), 200
+    except Exception as e:
+        print(f"Error fetching stories: {e}")
+        return jsonify({'error': 'Failed to fetch stories'}), 500
+
+
+@app.route('/api/library/stories', methods=['POST'])
+@login_required
+def save_story():
+    """Save a story to user's library"""
+    try:
+        data = request.json
+        
+        # Create new story
+        new_story = Story(
+            title=data.get('title'),
+            genre=data.get('genre'),
+            content=data.get('content'),
+            age_group=data.get('ageGroup'),
+            read_time=data.get('readTime'),
+            cover_image=data.get('coverImage'),
+            questions=json.dumps(data.get('questions', [])),
+            flashcards=json.dumps(data.get('flashcards', [])),
+            user_id=current_user.id
+        )
+        
+        db.session.add(new_story)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Story saved successfully',
+            'story': new_story.to_dict()
+        }), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error saving story: {e}")
+        return jsonify({'error': 'Failed to save story'}), 500
+
+
+@app.route('/api/library/stories/<int:story_id>', methods=['GET'])
+@login_required
+def get_story(story_id):
+    """Get a specific story"""
+    try:
+        story = Story.query.filter_by(id=story_id, user_id=current_user.id).first()
+        
+        if not story:
+            return jsonify({'error': 'Story not found'}), 404
+        
+        return jsonify({'story': story.to_dict()}), 200
+    
+    except Exception as e:
+        print(f"Error fetching story: {e}")
+        return jsonify({'error': 'Failed to fetch story'}), 500
+
+
+@app.route('/api/library/stories/<int:story_id>', methods=['DELETE'])
+@login_required
+def delete_story(story_id):
+    """Delete a story"""
+    try:
+        story = Story.query.filter_by(id=story_id, user_id=current_user.id).first()
+        
+        if not story:
+            return jsonify({'error': 'Story not found'}), 404
+        
+        db.session.delete(story)
+        db.session.commit()
+        
+        return jsonify({'message': 'Story deleted successfully'}), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting story: {e}")
+        return jsonify({'error': 'Failed to delete story'}), 500
+
+
 if __name__ == '__main__':
+    # Create tables
+    with app.app_context():
+        db.create_all()
+        print("✅ Database tables created")
+    
     app.run(debug=True, port=5000)

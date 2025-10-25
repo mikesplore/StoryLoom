@@ -11,10 +11,19 @@ import type {
   TranslateRequest,
   TranslateResponse,
   GenerateCoverImageRequest,
-  CoverImageResponse
+  CoverImageResponse,
+  LoginRequest,
+  RegisterRequest,
+  AuthResponse,
+  User,
+  SavedStory,
+  StoryWithQuiz
 } from '../types';
 
 const API_BASE_URL = '/api';
+
+// Configure axios to send cookies
+axios.defaults.withCredentials = true;
 
 export const storyApi = {
   // Health check
@@ -68,6 +77,60 @@ export const storyApi = {
   // Generate cover image for a story
   generateCoverImage: async (request: GenerateCoverImageRequest): Promise<CoverImageResponse> => {
     const response = await axios.post(`${API_BASE_URL}/generate-cover-image`, request);
+    return response.data;
+  },
+};
+
+// Authentication API
+export const authApi = {
+  // Register a new user
+  register: async (request: RegisterRequest): Promise<AuthResponse> => {
+    const response = await axios.post(`${API_BASE_URL}/auth/register`, request);
+    return response.data;
+  },
+
+  // Login user
+  login: async (request: LoginRequest): Promise<AuthResponse> => {
+    const response = await axios.post(`${API_BASE_URL}/auth/login`, request);
+    return response.data;
+  },
+
+  // Logout user
+  logout: async (): Promise<{ message: string }> => {
+    const response = await axios.post(`${API_BASE_URL}/auth/logout`);
+    return response.data;
+  },
+
+  // Get current user
+  getCurrentUser: async (): Promise<{ user: User }> => {
+    const response = await axios.get(`${API_BASE_URL}/auth/user`);
+    return response.data;
+  },
+};
+
+// Story Library API
+export const libraryApi = {
+  // Get all user's saved stories
+  getStories: async (): Promise<{ stories: SavedStory[] }> => {
+    const response = await axios.get(`${API_BASE_URL}/library/stories`);
+    return response.data;
+  },
+
+  // Save a story
+  saveStory: async (story: StoryWithQuiz & { ageGroup: string; coverImage?: string }): Promise<{ message: string; story: SavedStory }> => {
+    const response = await axios.post(`${API_BASE_URL}/library/stories`, story);
+    return response.data;
+  },
+
+  // Get a specific story
+  getStory: async (storyId: number): Promise<{ story: SavedStory }> => {
+    const response = await axios.get(`${API_BASE_URL}/library/stories/${storyId}`);
+    return response.data;
+  },
+
+  // Delete a story
+  deleteStory: async (storyId: number): Promise<{ message: string }> => {
+    const response = await axios.delete(`${API_BASE_URL}/library/stories/${storyId}`);
     return response.data;
   },
 };
