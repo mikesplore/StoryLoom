@@ -56,6 +56,8 @@ export default function StoryLoom() {
   const [selectedTheme, setSelectedTheme] = useState<Theme>('Mystery');
   const [selectedAgeGroup, setSelectedAgeGroup] = useState<AgeGroup>('kids');
   const [customPrompt, setCustomPrompt] = useState('');
+  // Multi-step wizard state for the homepage story preferences
+  const [wizardStep, setWizardStep] = useState<number>(1); // 1..3
   const [availableThemes, setAvailableThemes] = useState<Theme[]>([]);
   const [ageGroups, setAgeGroups] = useState<Record<string, AgeGroupInfo>>({});
   const [isGenerating, setIsGenerating] = useState(false);
@@ -765,117 +767,133 @@ export default function StoryLoom() {
                     </div>
                   )}
 
-                  {/* Step-by-Step Form */}
+                  {/* Step-by-Step Wizard (one step per screen) */}
                   <div className="space-y-6 md:space-y-8">
-                  {/* Step 1: Age Group Selection - Mobile Optimized */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">1</div>
-                      <h3 className="text-lg md:text-xl font-semibold text-white">What's your age group?</h3>
+                    {/* Progress / Step indicator */}
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <div className="text-sm text-slate-400">Step</div>
+                      <div className="font-bold text-white">{wizardStep}</div>
+                      <div className="text-sm text-slate-400">of 3</div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                      {Object.entries(ageGroups).map(([key, info]) => (
-                        <button
-                          key={key}
-                          onClick={() => setSelectedAgeGroup(key as AgeGroup)}
-                          className={`p-4 md:p-6 rounded-2xl text-left transition-all duration-300 transform hover:scale-102 active:scale-98 ${
-                            selectedAgeGroup === key
-                              ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 shadow-lg shadow-teal-500/30'
-                              : 'bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 border border-slate-600/50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl ${
-                              selectedAgeGroup === key ? 'bg-white/20' : 'bg-slate-600/50'
-                            }`}>
-                              {info.emoji}
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-bold text-base md:text-lg mb-1">{info.label}</div>
-                              <div className={`text-sm md:text-base ${selectedAgeGroup === key ? 'text-slate-800' : 'text-slate-400'}`}>
-                                {info.description}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
-                  {/* Step 2: Theme Selection - Mobile Grid */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white text-sm md:text-base font-bold">2</div>
-                      <h3 className="text-lg md:text-xl font-semibold text-white">Pick your story theme</h3>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3">
-                      {availableThemes.map((theme) => (
-                        <button
-                          key={theme}
-                          onClick={() => setSelectedTheme(theme)}
-                          className={`px-3 py-3 md:px-4 md:py-4 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 active:scale-95 text-sm md:text-base ${
-                            selectedTheme === theme
-                              ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30'
-                              : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border border-slate-600/50'
-                          }`}
-                        >
-                          {theme}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Step 3: Custom Prompt - Enhanced Textarea */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-amber-400 to-orange-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">3</div>
-                      <h3 className="text-lg md:text-xl font-semibold text-white">
-                        Describe your story idea 
-                        <span className="text-slate-400 font-normal text-sm md:text-base">(optional)</span>
-                      </h3>
-                    </div>
-                    <div className="relative">
-                      <textarea
-                        value={customPrompt}
-                        onChange={(e) => setCustomPrompt(e.target.value)}
-                        placeholder="Tell us what your story should be about... (e.g., 'A magical cat who can talk and goes on space adventures')"
-                        className="w-full px-4 py-4 md:px-6 md:py-6 bg-slate-700/50 border border-slate-600/50 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 resize-none text-sm md:text-base leading-relaxed"
-                        rows={4}
-                        maxLength={500}
+                    <div className="w-full bg-slate-700/30 rounded-full h-2 overflow-hidden mb-4">
+                      <div
+                        className="h-2 bg-gradient-to-r from-teal-400 to-cyan-400"
+                        style={{ width: `${(wizardStep / 3) * 100}%` }}
                       />
-                      <div className="absolute bottom-3 right-3 text-xs text-slate-500">
-                        {customPrompt.length}/500
-                      </div>
                     </div>
-                  </div>
 
-                  {/* Generate Button - Enhanced */}
-                  <div className="pt-4 md:pt-6">
-                    <button 
-                      onClick={handleGenerateStory}
-                      disabled={isGenerating || !selectedAgeGroup}
-                      className="w-full bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 text-white px-6 py-4 md:py-5 rounded-2xl font-bold text-base md:text-lg shadow-xl shadow-teal-500/30 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-teal-500/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-lg flex items-center justify-center gap-3 relative overflow-hidden"
-                    >
-                      {/* Animated background for loading state */}
-                      {isGenerating && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-teal-600 via-cyan-600 to-blue-600 animate-pulse"></div>
-                      )}
-                      
-                      <div className="relative flex items-center gap-3">
-                        {isGenerating ? (
-                          <>
-                            <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
-                            {isGeneratingQuiz ? 'Adding Quiz & Flashcards...' : 'Crafting Your Story...'}
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
-                            Create My Story
-                          </>
-                        )}
+                    {/* Step panes */}
+                    {wizardStep === 1 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">1</div>
+                          <h3 className="text-lg md:text-xl font-semibold text-white">What's your age group?</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                          {Object.entries(ageGroups).map(([key, info]) => (
+                            <button
+                              key={key}
+                              onClick={() => setSelectedAgeGroup(key as AgeGroup)}
+                              className={`p-4 md:p-6 rounded-2xl text-left transition-all duration-300 transform hover:scale-102 active:scale-98 ${
+                                selectedAgeGroup === key
+                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 shadow-lg shadow-teal-500/30'
+                                  : 'bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 border border-slate-600/50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl ${
+                                  selectedAgeGroup === key ? 'bg-white/20' : 'bg-slate-600/50'
+                                }`}>
+                                  {info.emoji}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="font-bold text-base md:text-lg mb-1">{info.label}</div>
+                                  <div className={`text-sm md:text-base ${selectedAgeGroup === key ? 'text-slate-800' : 'text-slate-400'}`}>
+                                    {info.description}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </button>
-                    
+                    )}
+
+                    {wizardStep === 2 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white text-sm md:text-base font-bold">2</div>
+                          <h3 className="text-lg md:text-xl font-semibold text-white">Pick your story theme</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3">
+                          {availableThemes.map((theme) => (
+                            <button
+                              key={theme}
+                              onClick={() => setSelectedTheme(theme)}
+                              className={`px-3 py-3 md:px-4 md:py-4 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 active:scale-95 text-sm md:text-base ${
+                                selectedTheme === theme
+                                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30'
+                                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border border-slate-600/50'
+                              }`}
+                            >
+                              {theme}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {wizardStep === 3 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-amber-400 to-orange-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">3</div>
+                          <h3 className="text-lg md:text-xl font-semibold text-white">
+                            Describe your story idea 
+                            <span className="text-slate-400 font-normal text-sm md:text-base">(optional)</span>
+                          </h3>
+                        </div>
+                        <div className="relative">
+                          <textarea
+                            value={customPrompt}
+                            onChange={(e) => setCustomPrompt(e.target.value)}
+                            placeholder="Tell us what your story should be about... (e.g., 'A magical cat who can talk and goes on space adventures')"
+                            className="w-full px-4 py-4 md:px-6 md:py-6 bg-slate-700/50 border border-slate-600/50 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 resize-none text-sm md:text-base leading-relaxed"
+                            rows={4}
+                            maxLength={500}
+                          />
+                          <div className="absolute bottom-3 right-3 text-xs text-slate-500">
+                            {customPrompt.length}/500
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Navigation: Back / Next / Create */}
+                    <div className="pt-4 md:pt-6 flex items-center gap-3">
+                      <button
+                        onClick={() => setWizardStep(Math.max(1, wizardStep - 1))}
+                        disabled={wizardStep === 1}
+                        className="flex-1 bg-slate-700/40 text-white px-4 py-3 rounded-2xl font-semibold text-sm md:text-base hover:bg-slate-700/60 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        Back
+                      </button>
+
+                      {wizardStep < 3 ? (
+                        <button
+                          onClick={() => setWizardStep(Math.min(3, wizardStep + 1))}
+                          className="flex-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 text-white px-4 py-3 rounded-2xl font-bold text-sm md:text-base shadow transition transform hover:scale-102">
+                          Next
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={handleGenerateStory}
+                          disabled={isGenerating || !selectedAgeGroup}
+                          className="flex-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 text-white px-4 py-3 rounded-2xl font-bold text-sm md:text-base shadow transition transform hover:scale-102 disabled:opacity-50 disabled:cursor-not-allowed">
+                          {isGenerating ? (isGeneratingQuiz ? 'Adding Quiz & Flashcards...' : 'Crafting Your Story...') : 'Create My Story'}
+                        </button>
+                      )}
+                    </div>
+
                     {!selectedAgeGroup && (
                       <p className="text-center text-amber-400 text-sm mt-2 flex items-center justify-center gap-2">
                         <span className="w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center text-slate-900 text-xs">!</span>
@@ -884,7 +902,6 @@ export default function StoryLoom() {
                     )}
                   </div>
                 </div>
-              </div>
               )}
             </div>
 
