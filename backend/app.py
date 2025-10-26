@@ -1,3 +1,5 @@
+from flask_admin import Admin
+from flask_admin.contrib.sqla import ModelView
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -26,11 +28,18 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///storyloom.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize extensions
+# Initialize extensions
 CORS(app, supports_credentials=True)
 db.init_app(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+# Flask-Admin setup
+admin = Admin(app, name='StoryLoom Admin', template_mode='bootstrap4')
+with app.app_context():
+    admin.add_view(ModelView(User, db.session))
+    admin.add_view(ModelView(Story, db.session))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -39,7 +48,6 @@ def load_user(user_id):
 # Initialize AI Provider Manager (supports multiple providers with fallback)
 try:
     ai_manager = AIProviderManager()
-    print(f"🚀 AI System ready with {ai_manager.get_current_provider()} as primary provider")
 except Exception as e:
     print(f"❌ Failed to initialize AI providers: {e}")
     raise
@@ -48,30 +56,36 @@ except Exception as e:
 THEMES = [
     'Mystery', 'Comedy', 'Adventure', 'Science Fiction', 
     'Fantasy', 'Horror', 'Romance', 'Thriller', 
-    'Historical', 'Drama'
+    'Historical', 'Drama', 'Crime', 'Fairy Tale', 
+    'Supernatural', 'Slice of Life'
 ]
 
 # Age groups and their reading levels
 AGE_GROUPS = {
-    'children': {
-        'label': 'Children (5-8 years)',
-        'description': 'Simple words, short sentences, easy to understand',
-        'word_count': '200-300'
+    'early_readers': {
+        'label': 'Early Readers (4-7 years)',
+        'description': 'Very simple words, short sentences, lots of repetition',
+        'word_count': '100-200'
     },
-    'kids': {
-        'label': 'Kids (9-12 years)',
-        'description': 'Basic vocabulary, clear stories',
-        'word_count': '300-400'
+    'children': {
+        'label': 'Children (8-10 years)',
+        'description': 'Simple vocabulary, short paragraphs, clear storylines',
+        'word_count': '200-350'
+    },
+    'preteens': {
+        'label': 'Preteens (11-12 years)',
+        'description': 'Basic to intermediate vocabulary, more complex plots',
+        'word_count': '350-500'
     },
     'teens': {
         'label': 'Teens (13-17 years)',
-        'description': 'Regular vocabulary, interesting plots',
-        'word_count': '400-500'
+        'description': 'Regular vocabulary, engaging and varied plots',
+        'word_count': '500-700'
     },
     'adults': {
         'label': 'Adults (18+ years)',
-        'description': 'Advanced vocabulary, complex stories',
-        'word_count': '400-600'
+        'description': 'Advanced vocabulary, complex stories and themes',
+        'word_count': '700-1000'
     }
 }
 
@@ -93,9 +107,11 @@ LANGUAGES = {
     'nl': 'Dutch',
     'pl': 'Polish',
     'sv': 'Swedish',
+    'sw': 'Swahili',
     'id': 'Indonesian',
     'th': 'Thai',
-    'vi': 'Vietnamese'
+    'vi': 'Vietnamese',
+    'luo': 'Luo'
 }
 
 
@@ -144,19 +160,37 @@ def get_languages():
 
 
 @app.route('/api/generate-story', methods=['POST'])
+@login_required
 def generate_story():
-    """Generate a story based on theme, age group, and prompt"""
+    """Generate a story based on theme, age group, and prompt, with per-user daily rate limit"""
     try:
         data = request.json
+        print(f"📥 Received request data: {data}")
+
+        # Rate limit: 3 stories per user per day
+        user = current_user
+        now = datetime.utcnow()
+        today = now.date()
+        last_activity = user.last_activity.date() if user.last_activity else None
+        if last_activity == today:
+            if user.stories_generated >= 1:
+                return jsonify({'error': 'Daily story generation limit reached. Please try again tomorrow.'}), 429
+            user.stories_generated += 1
+        else:
+            user.stories_generated = 1
+            user.last_activity = now
+        db.session.commit()
+
         theme = data.get('theme', 'Mystery')
         custom_prompt = data.get('prompt', '')
-        age_group = data.get('ageGroup', 'kids')  # children, kids, teens, adults
-        
-        age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['kids'])
+        age_group = data.get('ageGroup', 'children')  # early_readers, children, preteens, teens, adults
+
+        print(f"📚 Theme: {theme}, Age Group: {age_group}, Prompt: {custom_prompt[:50] if custom_prompt else 'None'}...")
+
+        age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['children'])
         word_count = age_info['word_count']
         reading_level = age_info['description']
-        
-        
+
         # Construct the prompt for Gemini
         if custom_prompt:
             prompt = f"""Create an engaging {theme} story based on this prompt: "{custom_prompt}"
@@ -209,8 +243,13 @@ Return ONLY a JSON object with this exact structure (no markdown, no code blocks
         return jsonify(story_data)
     
     except json.JSONDecodeError as e:
+        print(f"❌ JSON decode error: {e}")
+        print(f"Response text was: {response_text if 'response_text' in locals() else 'N/A'}")
         return jsonify({'error': 'Failed to parse story data', 'details': str(e)}), 500
     except Exception as e:
+        print(f"❌ Error generating story: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Failed to generate story', 'details': str(e)}), 500
 
 
@@ -221,9 +260,9 @@ def generate_quiz():
         data = request.json
         story_title = data.get('title', '')
         story_content = data.get('content', '')
-        age_group = data.get('ageGroup', 'kids')
+        age_group = data.get('ageGroup', 'children')
         
-        age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['kids'])
+        age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['children'])
         
         prompt = f"""Based on this story titled "{story_title}", create a comprehension quiz with 5 multiple-choice questions.
 
@@ -279,9 +318,9 @@ def generate_flashcards():
     try:
         data = request.json
         story_content = data.get('content', '')
-        age_group = data.get('ageGroup', 'kids')
+        age_group = data.get('ageGroup', 'children')
         
-        age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['kids'])
+        age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['children'])
         
         prompt = f"""Based on this story, create 5 vocabulary flashcards with important or interesting words.
 

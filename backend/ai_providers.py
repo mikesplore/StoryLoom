@@ -41,7 +41,7 @@ class GeminiProvider(AIProvider):
             try:
                 genai.configure(api_key=self.api_key)
                 self._model = genai.GenerativeModel('gemini-2.0-flash')
-                print(f"✅ Gemini provider initialized")
+             
             except Exception as e:
                 print(f"⚠️  Gemini provider initialization failed: {e}")
                 self._model = None
@@ -66,15 +66,11 @@ class HuggingFaceProvider(AIProvider):
     
     def __init__(self):
         self.api_key = os.getenv('HUGGINGFACE_API_KEY')
-        # Using a good free model for text generation
-        self.model_id = "HuggingFaceH4/zephyr-7b-beta"
-        # Hugging Face Chat Completions endpoint (OpenAI-compatible)
-        self.api_url = "https://api-inference.huggingface.co/models/google/flan-t5-xl"
+        # Use Zephyr-7B Beta, a strong free-tier chat/instruct model
+        self.model_id = "huggingfaceh4/zephyr-7b-beta"
+        # Correct API endpoint for this model
+        self.api_url = f"https://api-inference.huggingface.co/models/{self.model_id}"
         
-        if self.api_key:
-            print(f"✅ Hugging Face provider initialized with model: {self.model_id}")
-        else:
-            print("⚠️  Hugging Face API key not found")
     
     def generate_content(self, prompt: str) -> str:
         if not self.api_key:
@@ -86,13 +82,12 @@ class HuggingFaceProvider(AIProvider):
         }
         
         payload = {
-            "model": self.model_id,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": 2000,
-            "temperature": 0.7,
-            "top_p": 0.95
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": 1024,
+                "temperature": 0.7,
+                "top_p": 0.95
+            }
         }
         
         try:
@@ -106,7 +101,6 @@ class HuggingFaceProvider(AIProvider):
             if response.status_code == 503:
                 # Model is loading, wait and retry once
                 import time
-                print("Model is loading, waiting 20 seconds...")
                 time.sleep(20)
                 response = requests.post(
                     self.api_url,
@@ -117,16 +111,11 @@ class HuggingFaceProvider(AIProvider):
             
             response.raise_for_status()
             result = response.json()
-            # OpenAI-compatible response: result['choices'][0]['message']['content']
-            if (
-                isinstance(result, dict)
-                and "choices" in result
-                and isinstance(result["choices"], list)
-                and len(result["choices"]) > 0
-                and "message" in result["choices"][0]
-                and "content" in result["choices"][0]["message"]
-            ):
-                return result["choices"][0]["message"]["content"]
+            # Zephyr and most Hugging Face instruct models return {'generated_text': ...} or a list of such dicts
+            if isinstance(result, list) and len(result) > 0 and 'generated_text' in result[0]:
+                return result[0]['generated_text']
+            elif isinstance(result, dict) and 'generated_text' in result:
+                return result['generated_text']
             else:
                 raise Exception(f"Unexpected response format: {result}")
                 

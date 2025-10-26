@@ -1065,8 +1065,7 @@ export default function StoryLoom() {
         )}
   </main>
 
-  {/* Spacer for fixed footer */}
-  <div style={{ height: '80px' }} />
+
 
       {/* Footer */}
       <Footer />
