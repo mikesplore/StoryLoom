@@ -4,6 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { storyApi, authApi, libraryApi, userApi } from './services/api';
 import type { Theme, StoryWithQuiz, ViewType, AgeGroup, AgeGroupInfo, Flashcard, User, SavedStory, UserStats } from './types';
 import Header from './components/Header';
+import LoadingBar from './components/LoadingBar';
 import Footer from './components/Footer';
 import LoadingPlaceholder from './components/LoadingPlaceholder';
 import StoryView from './components/StoryView';
@@ -15,6 +16,8 @@ import AuthView from './components/AuthView';
 
 export default function StoryLoom() {
   const [activeView, setActiveView] = useState<ViewType>('home');
+  // Global loading state
+  // Only one definition of isLoading should exist
   const [menuOpen, setMenuOpen] = useState(false);
   const [currentStory, setCurrentStory] = useState<StoryWithQuiz | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -89,6 +92,9 @@ export default function StoryLoom() {
   const [translatedQuiz, setTranslatedQuiz] = useState<Array<{question: string, options: string[]}>>([]);
   const [translatedFlashcards, setTranslatedFlashcards] = useState<Flashcard[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
+
+  // Global loading state
+  const isLoading = isGenerating || isGeneratingQuiz || isGeneratingFlashcards || isGeneratingImage || isLoadingLibrary || isSavingStory || isTranslating || isAuthenticating || isRecovering;
 
   // Fetch available options on mount
   useEffect(() => {
@@ -229,24 +235,17 @@ export default function StoryLoom() {
       } catch (err) {
         console.warn('Failed to update user stats after generating story:', err);
       }
-      // Generate cover image in parallel with quiz
+      // Generate cover image (quiz will be generated when user clicks "Start Quiz")
       setIsGeneratingImage(true);
       console.log('🎨 Starting cover image generation...');
-      const [quiz, coverImageResult] = await Promise.all([
-        storyApi.generateQuiz({
-          title: story.title,
-          content: story.content,
-          ageGroup: selectedAgeGroup,
-        }),
-        storyApi.generateCoverImage({
-          title: story.title,
-          genre: story.genre,
-          summary: (story as any).imageDescription || story.content.substring(0, 200), // Use AI-generated description or fallback
-        }).catch(err => {
-          console.warn('Cover image generation failed:', err);
-          return { imageData: null, fallback: true };
-        })
-      ]);
+      const coverImageResult = await storyApi.generateCoverImage({
+        title: story.title,
+        genre: story.genre,
+        summary: (story as any).imageDescription || story.content.substring(0, 200), // Use AI-generated description or fallback
+      }).catch(err => {
+        console.warn('Cover image generation failed:', err);
+        return { imageData: null, fallback: true };
+      });
       
       console.log('🖼️ Cover image result:', coverImageResult);
       console.log('📊 Full response:', JSON.stringify(coverImageResult, null, 2));
@@ -259,7 +258,6 @@ export default function StoryLoom() {
         console.log('⚠️ Image generation error:', coverImageResult.error);
       }
       
-      setIsGeneratingQuiz(true);
       setIsGeneratingImage(false);
       
       if (coverImageResult.imageData) {
@@ -269,9 +267,10 @@ export default function StoryLoom() {
         console.log('❌ No image data received');
       }
       
+      // Store story without quiz - quiz will be generated when user clicks "Start Quiz"
       setCurrentStory({
         ...story,
-        questions: quiz.questions,
+        questions: [], // Empty initially
       });
       
       setActiveView('story');
@@ -352,7 +351,7 @@ export default function StoryLoom() {
           
           return {
             question: questionResult.translatedText,
-            options: optionsResults.map(r => r.translatedText),
+            options: optionsResults.map(opt => opt.translatedText),
           };
         })
       );
@@ -386,7 +385,29 @@ export default function StoryLoom() {
     }
   };
 
-  const handleStartQuiz = () => {
+  const handleStartQuiz = async () => {
+    // Generate quiz if not already generated
+    if (!currentStory?.questions || currentStory.questions.length === 0) {
+      setIsGeneratingQuiz(true);
+      try {
+        const quiz = await storyApi.generateQuiz({
+          title: currentStory!.title,
+          content: currentStory!.content,
+          ageGroup: selectedAgeGroup,
+        });
+        setCurrentStory({
+          ...currentStory!,
+          questions: quiz.questions,
+        });
+      } catch (err) {
+        console.error('Error generating quiz:', err);
+        setError('Failed to generate quiz. Please try again.');
+        setIsGeneratingQuiz(false);
+        return;
+      } finally {
+        setIsGeneratingQuiz(false);
+      }
+    }
     setActiveView('quiz');
     setCurrentQuestion(0);
     setSelectedAnswer(null);
@@ -661,190 +682,192 @@ export default function StoryLoom() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-teal-900">
-      {/* Toast Notifications */}
-      <Toaster 
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#1e293b',
-            color: '#fff',
-            border: '1px solid rgba(20, 184, 166, 0.2)',
-          },
-          success: {
-            iconTheme: {
-              primary: '#14b8a6',
-              secondary: '#fff',
+    <>
+      <LoadingBar loading={isLoading} />
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-teal-900">
+        {/* Toast Notifications */}
+        <Toaster 
+          position="top-right"
+          toastOptions={{
+            duration: 3000,
+            style: {
+              background: '#1e293b',
+              color: '#fff',
+              border: '1px solid rgba(20, 184, 166, 0.2)',
             },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
+            success: {
+              iconTheme: {
+                primary: '#14b8a6',
+                secondary: '#fff',
+              },
             },
-          },
-        }}
-      />
-      
-      {/* Header */}
-      <Header
-        currentUser={currentUser}
-        currentStory={currentStory}
-        selectedLanguage={selectedLanguage}
-        availableLanguages={availableLanguages}
-        isTranslating={isTranslating}
-        menuOpen={menuOpen}
-        setMenuOpen={setMenuOpen}
-        setActiveView={setActiveView}
-        handleNewStory={handleNewStory}
-        handleLoadLibrary={handleLoadLibrary}
-        handleLogout={handleLogout}
-        handleGlobalTranslation={handleGlobalTranslation}
-      />
+            error: {
+              iconTheme: {
+                primary: '#ef4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
+        
+        {/* Header */}
+        <Header
+          currentUser={currentUser}
+          currentStory={currentStory}
+          selectedLanguage={selectedLanguage}
+          availableLanguages={availableLanguages}
+          isTranslating={isTranslating}
+          menuOpen={menuOpen}
+          setMenuOpen={setMenuOpen}
+          setActiveView={setActiveView}
+          handleNewStory={handleNewStory}
+          handleLoadLibrary={handleLoadLibrary}
+          handleLogout={handleLogout}
+          handleGlobalTranslation={handleGlobalTranslation}
+        />
 
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        {/* Home View */}
-        {activeView === 'home' && (
-          <div className="space-y-8 md:space-y-12">
-            {/* Hero Section - Mobile-Optimized */}
-            <div className="text-center px-4 md:px-0">
-              <div className="relative mb-6 md:mb-8">
-                <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-teal-500/30 animate-pulse">
-                  <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-slate-900" />
+        {/* Main Content */}
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+          {/* Home View */}
+          {activeView === 'home' && (
+            <div className="space-y-8 md:space-y-12">
+              {/* Hero Section - Mobile-Optimized */}
+              <div className="text-center px-4 md:px-0">
+                <div className="relative mb-6 md:mb-8">
+                  <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-full mx-auto flex items-center justify-center shadow-lg shadow-teal-500/30 animate-pulse">
+                    <Sparkles className="w-8 h-8 md:w-10 md:h-10 text-slate-900" />
+                  </div>
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-bounce delay-300"></div>
+                  <div className="absolute -bottom-1 -left-3 w-4 h-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full animate-bounce delay-700"></div>
                 </div>
-                <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-bounce delay-300"></div>
-                <div className="absolute -bottom-1 -left-3 w-4 h-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full animate-bounce delay-700"></div>
+                
+                <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white mb-3 md:mb-4 leading-tight">
+                  Create Your
+                  <span className="block text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-cyan-400 to-blue-400 animate-pulse">
+                    Perfect Story
+                  </span>
+                </h1>
+                <p className="text-base md:text-xl text-slate-300 mb-8 max-w-2xl mx-auto leading-relaxed">
+                  AI-powered storytelling tailored for your age. Complete with interactive quizzes, flashcards, and multilingual support.
+                </p>
+
+                {/* Quick Stats */}
+                {currentUser && (
+                  <div className="flex justify-center gap-4 md:gap-8 mb-8">
+                    <div className="text-center">
+                      <div className="text-2xl md:text-3xl font-bold text-teal-400">{userStats.storiesGenerated}</div>
+                      <div className="text-xs md:text-sm text-slate-400">Stories Created</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl md:text-3xl font-bold text-orange-400">{userStats.currentStreak}</div>
+                      <div className="text-xs md:text-sm text-slate-400">Day Streak</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl md:text-3xl font-bold text-purple-400">{userStats.totalStoriesSaved}</div>
+                      <div className="text-xs md:text-sm text-slate-400">Saved Stories</div>
+                    </div>
+                  </div>
+                )}
               </div>
-              
-              <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white mb-3 md:mb-4 leading-tight">
-                Create Your
-                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-cyan-400 to-blue-400 animate-pulse">
-                  Perfect Story
-                </span>
-              </h1>
-              <p className="text-base md:text-xl text-slate-300 mb-8 max-w-2xl mx-auto leading-relaxed">
-                AI-powered storytelling tailored for your age. Complete with interactive quizzes, flashcards, and multilingual support.
-              </p>
 
-              {/* Quick Stats */}
-              {currentUser && (
-                <div className="flex justify-center gap-4 md:gap-8 mb-8">
-                  <div className="text-center">
-                    <div className="text-2xl md:text-3xl font-bold text-teal-400">{userStats.storiesGenerated}</div>
-                    <div className="text-xs md:text-sm text-slate-400">Stories Created</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl md:text-3xl font-bold text-orange-400">{userStats.currentStreak}</div>
-                    <div className="text-xs md:text-sm text-slate-400">Day Streak</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl md:text-3xl font-bold text-purple-400">{userStats.totalStoriesSaved}</div>
-                    <div className="text-xs md:text-sm text-slate-400">Saved Stories</div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Story Creation Form - Enhanced Mobile UX */}
-            <div className="max-w-3xl mx-auto">
-              {isGenerating ? (
-                <LoadingPlaceholder isGeneratingQuiz={isGeneratingQuiz} />
-              ) : (
-                <div className="bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-teal-500/20 rounded-3xl p-4 md:p-8 shadow-2xl">
-                  <div className="text-center mb-6 md:mb-8">
-                    <h2 className="text-xl md:text-2xl font-bold text-white mb-2">Start Your Adventure</h2>
-                    <p className="text-sm md:text-base text-slate-400">Choose your preferences and let AI create magic</p>
-                  </div>
-                  
-                  {error && (
-                    <div className="mb-6 p-4 bg-red-500/20 border border-red-500/40 rounded-xl text-red-300 text-sm md:text-base">
-                      <div className="flex items-center gap-2">
-                        <XCircle className="w-5 h-5 flex-shrink-0" />
-                        {error}
-                      </div>
+              {/* Story Creation Form - Enhanced Mobile UX */}
+              <div className="max-w-3xl mx-auto">
+                {isGenerating ? (
+                  <LoadingPlaceholder isGeneratingQuiz={isGeneratingQuiz} />
+                ) : (
+                  <div className="bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-teal-500/20 rounded-3xl p-4 md:p-8 shadow-2xl">
+                    <div className="text-center mb-6 md:mb-8">
+                      <h2 className="text-xl md:text-2xl font-bold text-white mb-2">Start Your Adventure</h2>
+                      <p className="text-sm md:text-base text-slate-400">Choose your preferences and let AI create magic</p>
                     </div>
-                  )}
-
-                  {/* Step-by-Step Wizard (one step per screen) */}
-                  <div className="space-y-6 md:space-y-8">
-                    {/* Progress / Step indicator */}
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <div className="text-sm text-slate-400">Step</div>
-                      <div className="font-bold text-white">{wizardStep}</div>
-                      <div className="text-sm text-slate-400">of 3</div>
-                    </div>
-
-                    <div className="w-full bg-slate-700/30 rounded-full h-2 overflow-hidden mb-4">
-                      <div
-                        className="h-2 bg-gradient-to-r from-teal-400 to-cyan-400"
-                        style={{ width: `${(wizardStep / 3) * 100}%` }}
-                      />
-                    </div>
-
-                    {/* Step panes */}
-                    {wizardStep === 1 && (
-                      <div className="space-y-4">
+                    
+                    {error && (
+                      <div className="mb-6 p-4 bg-red-500/20 border border-red-500/40 rounded-xl text-red-300 text-sm md:text-base">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">1</div>
-                          <h3 className="text-lg md:text-xl font-semibold text-white">What's your age group?</h3>
+                          <XCircle className="w-5 h-5 flex-shrink-0" />
+                          {error}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                          {Object.entries(ageGroups).map(([key, info]) => (
-                            <button
-                              key={key}
-                              onClick={() => setSelectedAgeGroup(key as AgeGroup)}
-                              className={`p-4 md:p-6 rounded-2xl text-left transition-all duration-300 transform hover:scale-102 active:scale-98 ${
-                                selectedAgeGroup === key
-                                  ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 shadow-lg shadow-teal-500/30'
-                                  : 'bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 border border-slate-600/50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl ${
-                                  selectedAgeGroup === key ? 'bg-white/20' : 'bg-slate-600/50'
-                                }`}>
-                                  {info.emoji}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="font-bold text-base md:text-lg mb-1">{info.label}</div>
-                                  <div className={`text-sm md:text-base ${selectedAgeGroup === key ? 'text-slate-800' : 'text-slate-400'}`}>
-                                    {info.description}
+                      </div>
+                    )}
+
+                    {/* Step-by-Step Wizard (one step per screen) */}
+                    <div className="space-y-6 md:space-y-8">
+                      {/* Progress / Step indicator */}
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <div className="text-sm text-slate-400">Step</div>
+                        <div className="font-bold text-white">{wizardStep}</div>
+                        <div className="text-sm text-slate-400">of 3</div>
+                      </div>
+
+                      <div className="w-full bg-slate-700/30 rounded-full h-2 overflow-hidden mb-4">
+                        <div
+                          className="h-2 bg-gradient-to-r from-teal-400 to-cyan-400"
+                          style={{ width: `${(wizardStep / 3) * 100}%` }}
+                        />
+                      </div>
+
+                      {/* Step panes */}
+                      {wizardStep === 1 && (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">1</div>
+                            <h3 className="text-lg md:text-xl font-semibold text-white">What's your age group?</h3>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+                            {Object.entries(ageGroups).map(([key, info]) => (
+                              <button
+                                key={key}
+                                onClick={() => setSelectedAgeGroup(key as AgeGroup)}
+                                className={`p-4 md:p-6 rounded-2xl text-left transition-all duration-300 transform hover:scale-102 active:scale-98 ${
+                                  selectedAgeGroup === key
+                                    ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 shadow-lg shadow-teal-500/30'
+                                    : 'bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 border border-slate-600/50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl ${
+                                    selectedAgeGroup === key ? 'bg-white/20' : 'bg-slate-600/50'
+                                  }`}>
+                                    {info.emoji}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="font-bold text-base md:text-lg mb-1">{info.label}</div>
+                                    <div className={`text-sm md:text-base ${selectedAgeGroup === key ? 'text-slate-800' : 'text-slate-400'}`}>
+                                      {info.description}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </button>
-                          ))}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {wizardStep === 2 && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white text-sm md:text-base font-bold">2</div>
-                          <h3 className="text-lg md:text-xl font-semibold text-white">Pick your story theme</h3>
+                      {wizardStep === 2 && (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white text-sm md:text-base font-bold">2</div>
+                            <h3 className="text-lg md:text-xl font-semibold text-white">Choose your story theme</h3>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                            {availableThemes.map((theme) => (
+                              <button
+                                key={theme}
+                                onClick={() => setSelectedTheme(theme)}
+                                className={`px-3 py-3 md:px-4 md:py-4 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 active:scale-95 text-sm md:text-base ${
+                                  selectedTheme === theme
+                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30'
+                                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border border-slate-600/50'
+                                }`}
+                              >
+                                {theme}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3">
-                          {availableThemes.map((theme) => (
-                            <button
-                              key={theme}
-                              onClick={() => setSelectedTheme(theme)}
-                              className={`px-3 py-3 md:px-4 md:py-4 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 active:scale-95 text-sm md:text-base ${
-                                selectedTheme === theme
-                                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30'
-                                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border border-slate-600/50'
-                              }`}
-                            >
-                              {theme}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                      )}
 
-                    {wizardStep === 3 && (
+                      {wizardStep === 3 && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-amber-400 to-orange-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">3</div>
@@ -947,9 +970,9 @@ export default function StoryLoom() {
               </div>
             </div>
           </div>
-        )}
+          )}
 
-        {/* Story View */}
+          {/* Story View */}
         {activeView === 'story' && currentStory && (
           <StoryView
             currentStory={currentStory}
@@ -1063,14 +1086,14 @@ export default function StoryLoom() {
             handleDeleteStory={handleDeleteStory}
           />
         )}
-  </main>
+        </main>
 
+        {/* Footer is now part of content flow, no spacer needed */}
 
+        {/* Footer */}
+        <Footer />
 
-      {/* Footer */}
-      <Footer />
-
-      <style>{`
+        <style>{`
         @keyframes float {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-10px); }
@@ -1140,6 +1163,7 @@ export default function StoryLoom() {
           background: rgba(20, 184, 166, 0.7);
         }
       `}</style>
-    </div>
+      </div>
+    </>
   );
 }

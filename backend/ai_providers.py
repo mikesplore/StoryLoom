@@ -10,6 +10,93 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 import google.generativeai as genai
 
+class AIProvider(ABC):
+    """Abstract base class for AI providers"""
+    @abstractmethod
+    def generate_content(self, prompt: str) -> str:
+        pass
+    @abstractmethod
+    def is_available(self) -> bool:
+        pass
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
+class GitHubModelProvider(AIProvider):
+    """GitHub Models Provider - Generic class for any GitHub-hosted model"""
+    def __init__(self, model_name: str, display_name: str, temperature: float = 0.8, top_p: float = 0.1, max_tokens: int = 2048):
+        self.api_key = os.getenv('GITHUB_TOKEN')
+        self.api_url = "https://models.github.ai/inference/chat/completions"
+        self.model = model_name
+        self.display_name = display_name
+        self.temperature = temperature
+        self.top_p = top_p
+        self.max_tokens = max_tokens
+        if self.api_key:
+            print(f"✅ {self.display_name} provider initialized")
+        else:
+            print("⚠️  GITHUB_TOKEN not found")
+
+    def generate_content(self, prompt: str) -> str:
+        if not self.api_key:
+            raise Exception("GITHUB_TOKEN not configured")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "You are a creative storyteller."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "top_p": self.top_p
+        }
+        try:
+            response = requests.post(
+                self.api_url,
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+            result = response.json()
+            if (
+                isinstance(result, dict)
+                and "choices" in result
+                and isinstance(result["choices"], list)
+                and len(result["choices"]) > 0
+                and "message" in result["choices"][0]
+                and "content" in result["choices"][0]["message"]
+            ):
+                return result["choices"][0]["message"]["content"]
+            else:
+                raise Exception(f"Unexpected response format: {result}")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"{self.display_name} API request failed: {str(e)}")
+
+    def is_available(self) -> bool:
+        return self.api_key is not None
+
+    @property
+    def name(self) -> str:
+        return self.display_name
+
+"""
+AI Provider Abstraction Layer
+Supports multiple AI providers with automatic fallback
+"""
+
+import os
+import json
+import requests
+from abc import ABC, abstractmethod
+from typing import Optional, Dict, Any
+import google.generativeai as genai
+
 
 class AIProvider(ABC):
     """Abstract base class for AI providers"""
@@ -61,83 +148,23 @@ class GeminiProvider(AIProvider):
         return "Gemini"
 
 
-class HuggingFaceProvider(AIProvider):
-    """Hugging Face Inference API Provider (Free Tier)"""
-    
-    def __init__(self):
-        self.api_key = os.getenv('HUGGINGFACE_API_KEY')
-        # Use Zephyr-7B Beta, a strong free-tier chat/instruct model
-        self.model_id = "huggingfaceh4/zephyr-7b-beta"
-        # Correct API endpoint for this model
-        self.api_url = f"https://api-inference.huggingface.co/models/{self.model_id}"
-        
-    
-    def generate_content(self, prompt: str) -> str:
-        if not self.api_key:
-            raise Exception("Hugging Face API key not configured")
-        
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": 1024,
-                "temperature": 0.7,
-                "top_p": 0.95
-            }
-        }
-        
-        try:
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            
-            if response.status_code == 503:
-                # Model is loading, wait and retry once
-                import time
-                time.sleep(20)
-                response = requests.post(
-                    self.api_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=60
-                )
-            
-            response.raise_for_status()
-            result = response.json()
-            # Zephyr and most Hugging Face instruct models return {'generated_text': ...} or a list of such dicts
-            if isinstance(result, list) and len(result) > 0 and 'generated_text' in result[0]:
-                return result[0]['generated_text']
-            elif isinstance(result, dict) and 'generated_text' in result:
-                return result['generated_text']
-            else:
-                raise Exception(f"Unexpected response format: {result}")
-                
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Hugging Face API request failed: {str(e)}")
-    
-    def is_available(self) -> bool:
-        return self.api_key is not None
-    
-    @property
-    def name(self) -> str:
-        return "Hugging Face"
-
-
 class AIProviderManager:
     """Manages multiple AI providers with automatic fallback"""
     
     def __init__(self):
-        # Initialize providers in order of preference
+        # Initialize providers in order of preference (all GitHub Models + Gemini)
         self.providers = [
+            # GitHub Models - Free tier with various models as fallbacks
+            GitHubModelProvider("openai/gpt-5", "GPT-5", temperature=1, top_p=1, max_tokens=16384),
+            GitHubModelProvider("openai/gpt-5-chat", "GPT-5 Chat", temperature=1, top_p=1, max_tokens=16384),
+            GitHubModelProvider("openai/gpt-5-mini", "GPT-5 Mini", temperature=1, top_p=1, max_tokens=8192),
+            GitHubModelProvider("openai/gpt-4.1-nano", "GPT-4.1 Nano", temperature=1, top_p=1, max_tokens=4096),
+            GitHubModelProvider("xai/grok-3", "Grok-3", temperature=1, top_p=1, max_tokens=8192),
+            GitHubModelProvider("meta/Llama-4-Maverick-17B-128E-Instruct-FP8", "Llama-4 Maverick", temperature=0.8, top_p=0.1, max_tokens=2048),
+            GitHubModelProvider("deepseek/DeepSeek-V3-0324", "DeepSeek-V3", temperature=0.8, top_p=0.1, max_tokens=2048),
+            GitHubModelProvider("cohere/cohere-command-a", "Cohere Command-A", temperature=0.8, top_p=0.1, max_tokens=2048),
+            # Gemini as final fallback (if configured)
             GeminiProvider(),
-            HuggingFaceProvider(),
         ]
         
         # Find available providers
@@ -146,9 +173,8 @@ class AIProviderManager:
         if not self.available_providers:
             raise Exception(
                 "No AI providers available! Please configure at least one API key:\n"
-                "- GEMINI_API_KEY for Google Gemini\n"
-                "- HUGGINGFACE_API_KEY for Hugging Face"
-            )
+                "- GITHUB_TOKEN for GitHub Models\n"
+                "- GEMINI_API_KEY for Google Gemini")
         
         print(f"\n🤖 Available AI Providers: {[p.name for p in self.available_providers]}")
         print(f"🎯 Primary provider: {self.available_providers[0].name}\n")
@@ -157,6 +183,7 @@ class AIProviderManager:
         """
         Generate content using available providers with automatic fallback
         Tries providers in order until one succeeds
+        Returns tuple: (content, provider_name)
         """
         last_error = None
         
@@ -164,10 +191,15 @@ class AIProviderManager:
             try:
                 print(f"🔄 Trying {provider.name}...")
                 result = provider.generate_content(prompt)
-                print(f"✅ {provider.name} succeeded")
+                print(f"✅ Story generated by: {provider.name}")
+                # Return result with model name embedded in a comment (for logging)
                 return result
             except Exception as e:
-                print(f"❌ {provider.name} failed: {str(e)}")
+                error_msg = str(e)
+                print(f"❌ {provider.name} failed: {error_msg}")
+                # Check if it's a rate limit error (429) - continue to next provider
+                if "429" in error_msg or "Too Many Requests" in error_msg:
+                    print(f"⏭️  Rate limit hit, trying next provider...")
                 last_error = e
                 continue
         

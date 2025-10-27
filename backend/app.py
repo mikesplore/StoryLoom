@@ -27,9 +27,8 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this-
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///storyloom.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Initialize extensions
-# Initialize extensions
-CORS(app, supports_credentials=True)
+ # Initialize extensions
+CORS(app, supports_credentials=True, origins=["https://05sf7791-5173.euw.devtunnels.ms/","https://171e3922ae53.ngrok-free.app/"])
 db.init_app(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
@@ -43,7 +42,7 @@ with app.app_context():
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Initialize AI Provider Manager (supports multiple providers with fallback)
 try:
@@ -62,30 +61,40 @@ THEMES = [
 
 # Age groups and their reading levels
 AGE_GROUPS = {
+    'preschool': {
+        'label': 'Preschool (3-5 years)',
+        'description': 'Very simple words, repetitive patterns, picture-book style. Use only basic sight words (cat, dog, run, see, etc.)',
+        'word_count': '50-100'
+    },
     'early_readers': {
-        'label': 'Early Readers (4-7 years)',
-        'description': 'Very simple words, short sentences, lots of repetition',
-        'word_count': '100-200'
+        'label': 'Early Readers (5-7 years)',
+        'description': 'Simple words, short sentences (3-5 words), easy to sound out. Focus on basic phonics and common words.',
+        'word_count': '150-250'
     },
     'children': {
         'label': 'Children (8-10 years)',
-        'description': 'Simple vocabulary, short paragraphs, clear storylines',
-        'word_count': '200-350'
+        'description': 'Simple vocabulary, clear sentences, easy to follow plots. Age-appropriate themes.',
+        'word_count': '300-500'
     },
-    'preteens': {
-        'label': 'Preteens (11-12 years)',
-        'description': 'Basic to intermediate vocabulary, more complex plots',
-        'word_count': '350-500'
+    'kids': {
+        'label': 'Pre-Teens (11-12 years)',
+        'description': 'Moderate vocabulary, descriptive language, engaging plots with some complexity.',
+        'word_count': '500-800'
     },
     'teens': {
         'label': 'Teens (13-17 years)',
-        'description': 'Regular vocabulary, engaging and varied plots',
-        'word_count': '500-700'
+        'description': 'Advanced vocabulary, complex plots, nuanced characters, mature themes appropriate for teens.',
+        'word_count': '800-1200'
+    },
+    'young_adults': {
+        'label': 'Young Adults (18-25 years)',
+        'description': 'Sophisticated vocabulary, intricate plots, deep character development, contemporary themes.',
+        'word_count': '1200-1800'
     },
     'adults': {
-        'label': 'Adults (18+ years)',
-        'description': 'Advanced vocabulary, complex stories and themes',
-        'word_count': '700-1000'
+        'label': 'Adults (25+ years)',
+        'description': 'Rich vocabulary, complex narratives, layered themes, literary quality.',
+        'word_count': '1500-2500'
     }
 }
 
@@ -173,7 +182,7 @@ def generate_story():
         today = now.date()
         last_activity = user.last_activity.date() if user.last_activity else None
         if last_activity == today:
-            if user.stories_generated >= 1:
+            if user.stories_generated >= 5:
                 return jsonify({'error': 'Daily story generation limit reached. Please try again tomorrow.'}), 429
             user.stories_generated += 1
         else:
@@ -190,8 +199,9 @@ def generate_story():
         age_info = AGE_GROUPS.get(age_group, AGE_GROUPS['children'])
         word_count = age_info['word_count']
         reading_level = age_info['description']
-
-        # Construct the prompt for Gemini
+        
+        
+        # Construct the prompt for story generation (quiz is separate)
         if custom_prompt:
             prompt = f"""Create an engaging {theme} story based on this prompt: "{custom_prompt}"
 
@@ -202,6 +212,7 @@ The story should be:
 - Use vocabulary and sentence structure suitable for this age group
 - Include age-appropriate themes and content
 - Be engaging and entertaining for the target audience
+- Dont include long dashes
 
 Return ONLY a JSON object with this exact structure (no markdown, no code blocks):
 {{
