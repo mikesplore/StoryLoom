@@ -28,7 +28,10 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///storyloom.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
  # Initialize extensions
-CORS(app, supports_credentials=True, origins=["https://05sf7791-5173.euw.devtunnels.ms/","https://171e3922ae53.ngrok-free.app/"])
+CORS(app, supports_credentials=True, origins=[
+    "https://story-loom-green.vercel.app",
+    "https://storyloom-wq6a.onrender.com"
+])
 db.init_app(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
