@@ -24,7 +24,7 @@ export default function StoryLoom() {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
-  
+
   // Authentication state
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -35,18 +35,18 @@ export default function StoryLoom() {
   const [registerPassword, setRegisterPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  
+
   // Password recovery state
   const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [isRecovering, setIsRecovering] = useState(false);
-  
+
   // Library state
   const [savedStories, setSavedStories] = useState<SavedStory[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
   const [isSavingStory, setIsSavingStory] = useState(false);
   const [currentLoadedStoryId, setCurrentLoadedStoryId] = useState<number | null>(null);
-  
+
   // User stats state
   const [userStats, setUserStats] = useState<UserStats>({
     storiesGenerated: 0,
@@ -54,7 +54,7 @@ export default function StoryLoom() {
     longestStreak: 0,
     totalStoriesSaved: 0
   });
-  
+
   // Story generation form state
   const [selectedTheme, setSelectedTheme] = useState<Theme>('Mystery');
   const [selectedAgeGroup, setSelectedAgeGroup] = useState<AgeGroup>('kids');
@@ -89,7 +89,7 @@ export default function StoryLoom() {
   const [availableLanguages, setAvailableLanguages] = useState<Record<string, string>>({});
   const [selectedLanguage, setSelectedLanguage] = useState<string>('en');
   const [translatedStory, setTranslatedStory] = useState<string>('');
-  const [translatedQuiz, setTranslatedQuiz] = useState<Array<{question: string, options: string[]}>>([]);
+  const [translatedQuiz, setTranslatedQuiz] = useState<Array<{ question: string, options: string[] }>>([]);
   const [translatedFlashcards, setTranslatedFlashcards] = useState<Flashcard[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
 
@@ -113,13 +113,13 @@ export default function StoryLoom() {
       }
     };
     fetchOptions();
-    
+
     // Check authentication status
     const checkAuth = async () => {
       try {
         const { user } = await authApi.getCurrentUser();
         setCurrentUser(user);
-        
+
         // Fetch user stats if authenticated
         try {
           const stats = await userApi.getStats();
@@ -135,7 +135,7 @@ export default function StoryLoom() {
       }
     };
     checkAuth();
-    
+
     // Load available voices for text-to-speech
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
@@ -146,7 +146,7 @@ export default function StoryLoom() {
         setSelectedVoice(englishVoice);
       }
     };
-    
+
     // Voices might not be loaded immediately
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
@@ -155,7 +155,7 @@ export default function StoryLoom() {
   // Text-to-Speech functions
   const handleSpeak = () => {
     if (!currentStory) return;
-    
+
     if (isSpeaking && !isPaused) {
       // Pause
       window.speechSynthesis.pause();
@@ -166,20 +166,20 @@ export default function StoryLoom() {
       setIsPaused(false);
     } else {
       // Start speaking
-      const textToSpeak = selectedLanguage !== 'en' && translatedStory 
-        ? translatedStory 
+      const textToSpeak = selectedLanguage !== 'en' && translatedStory
+        ? translatedStory
         : currentStory.content;
-      
+
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
-      
+
       if (selectedVoice) {
         utterance.voice = selectedVoice;
       }
-      
+
       utterance.rate = speechRate;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
-      
+
       // Get appropriate voice for the selected language
       if (selectedLanguage !== 'en' && availableVoices.length > 0) {
         const langCode = selectedLanguage;
@@ -188,27 +188,27 @@ export default function StoryLoom() {
           utterance.voice = matchingVoice;
         }
       }
-      
+
       utterance.onstart = () => {
         setIsSpeaking(true);
         setIsPaused(false);
       };
-      
+
       utterance.onend = () => {
         setIsSpeaking(false);
         setIsPaused(false);
       };
-      
+
       utterance.onerror = (event) => {
         console.error('Speech synthesis error:', event);
         setIsSpeaking(false);
         setIsPaused(false);
       };
-      
+
       window.speechSynthesis.speak(utterance);
     }
   };
-  
+
   const handleStopSpeaking = () => {
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
@@ -221,8 +221,13 @@ export default function StoryLoom() {
     setSelectedLanguage('en'); // Reset to English for new story
     setCoverImage(null); // Reset cover image
     handleStopSpeaking(); // Stop any ongoing speech
-    
+
     try {
+      if (!currentUser) {
+        toast.error("You must be logged in to generate a story.");
+        setActiveView('login'); // or show login modal
+        return;
+      }
       const story = await storyApi.generateStory({
         theme: selectedTheme,
         ageGroup: selectedAgeGroup,
@@ -237,7 +242,6 @@ export default function StoryLoom() {
       }
       // Generate cover image (quiz will be generated when user clicks "Start Quiz")
       setIsGeneratingImage(true);
-      console.log('🎨 Starting cover image generation...');
       const coverImageResult = await storyApi.generateCoverImage({
         title: story.title,
         genre: story.genre,
@@ -246,33 +250,29 @@ export default function StoryLoom() {
         console.warn('Cover image generation failed:', err);
         return { imageData: null, fallback: true };
       });
-      
-      console.log('🖼️ Cover image result:', coverImageResult);
-      console.log('📊 Full response:', JSON.stringify(coverImageResult, null, 2));
-      console.log('📊 Image data exists?', !!coverImageResult.imageData);
+
+    
       if (coverImageResult.imageData) {
         console.log('🎯 Image data length:', coverImageResult.imageData.length);
-        console.log('🔍 Image data preview:', coverImageResult.imageData.substring(0, 50));
       }
       if ('error' in coverImageResult && coverImageResult.error) {
         console.log('⚠️ Image generation error:', coverImageResult.error);
       }
-      
+
       setIsGeneratingImage(false);
-      
+
       if (coverImageResult.imageData) {
-        console.log('✅ Setting cover image in state');
         setCoverImage(coverImageResult.imageData);
       } else {
         console.log('❌ No image data received');
       }
-      
+
       // Store story without quiz - quiz will be generated when user clicks "Start Quiz"
       setCurrentStory({
         ...story,
         questions: [], // Empty initially
       });
-      
+
       setActiveView('story');
       setCurrentQuestion(0);
       setScore(0);
@@ -290,7 +290,7 @@ export default function StoryLoom() {
 
   const handleGenerateFlashcards = async () => {
     if (!currentStory) return;
-    
+
     setIsGeneratingFlashcards(true);
     try {
       const flashcardData = await storyApi.generateFlashcards({
@@ -311,7 +311,7 @@ export default function StoryLoom() {
 
   const handleGlobalTranslation = async (language: string) => {
     if (!currentStory) return;
-    
+
     if (language === 'en') {
       // Reset to English
       setSelectedLanguage('en');
@@ -320,10 +320,10 @@ export default function StoryLoom() {
       setTranslatedFlashcards([]);
       return;
     }
-    
+
     setIsTranslating(true);
     setSelectedLanguage(language);
-    
+
     try {
       // Translate story content
       const storyResult = await storyApi.translate({
@@ -331,7 +331,7 @@ export default function StoryLoom() {
         targetLanguage: language,
       });
       setTranslatedStory(storyResult.translatedText);
-      
+
       // Translate quiz questions and options
       const quizTranslations = await Promise.all(
         currentStory.questions.map(async (q) => {
@@ -339,16 +339,16 @@ export default function StoryLoom() {
             text: q.question,
             targetLanguage: language,
           });
-          
+
           const optionsResults = await Promise.all(
-            q.options.map(opt => 
+            q.options.map(opt =>
               storyApi.translate({
                 text: opt,
                 targetLanguage: language,
               })
             )
           );
-          
+
           return {
             question: questionResult.translatedText,
             options: optionsResults.map(opt => opt.translatedText),
@@ -356,7 +356,7 @@ export default function StoryLoom() {
         })
       );
       setTranslatedQuiz(quizTranslations);
-      
+
       // Translate flashcards if they exist
       if (flashcards.length > 0) {
         const flashcardTranslations = await Promise.all(
@@ -366,7 +366,7 @@ export default function StoryLoom() {
               storyApi.translate({ text: card.definition, targetLanguage: language }),
               storyApi.translate({ text: card.example, targetLanguage: language }),
             ]);
-            
+
             return {
               word: wordResult.translatedText,
               definition: defResult.translatedText,
@@ -376,7 +376,7 @@ export default function StoryLoom() {
         );
         setTranslatedFlashcards(flashcardTranslations);
       }
-      
+
     } catch (err: any) {
       console.error('Error translating:', err);
       setError('Failed to translate. Please try again.');
@@ -421,7 +421,7 @@ export default function StoryLoom() {
 
   const handleSubmitAnswer = () => {
     if (selectedAnswer === null || !currentStory) return;
-    
+
     const isCorrect = selectedAnswer === currentStory.questions[currentQuestion].correct;
     if (isCorrect) setScore(score + 1);
     setShowResult(true);
@@ -429,7 +429,7 @@ export default function StoryLoom() {
 
   const handleNextQuestion = () => {
     if (!currentStory) return;
-    
+
     if (currentQuestion < currentStory.questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
       setSelectedAnswer(null);
@@ -483,7 +483,7 @@ export default function StoryLoom() {
     e.preventDefault();
     setIsAuthenticating(true);
     setAuthError(null);
-    
+
     try {
       const { user } = await authApi.login({
         username: loginUsername,
@@ -507,7 +507,7 @@ export default function StoryLoom() {
     e.preventDefault();
     setIsAuthenticating(true);
     setAuthError(null);
-    
+
     try {
       const { user } = await authApi.register({
         username: registerUsername,
@@ -532,7 +532,7 @@ export default function StoryLoom() {
   const handlePasswordRecovery = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsRecovering(true);
-    
+
     // Simulate password recovery (you'll need to implement backend endpoint)
     setTimeout(() => {
       toast.success('Password recovery email sent! Check your inbox.');
@@ -563,7 +563,7 @@ export default function StoryLoom() {
       setActiveView('login');
       return;
     }
-    
+
     setIsLoadingLibrary(true);
     try {
       const { stories } = await libraryApi.getStories();
@@ -639,10 +639,10 @@ export default function StoryLoom() {
 
   const handleDeleteStoryFromView = async () => {
     if (!currentLoadedStoryId) return;
-    
+
     const confirmed = window.confirm('Remove this story from your library?');
     if (!confirmed) return;
-    
+
     try {
       await libraryApi.deleteStory(currentLoadedStoryId);
       setSavedStories(savedStories.filter(s => s.id !== currentLoadedStoryId));
@@ -657,7 +657,7 @@ export default function StoryLoom() {
   const handleDeleteStory = async (storyId: number) => {
     const confirmed = window.confirm('Are you sure you want to delete this story?');
     if (!confirmed) return;
-    
+
     try {
       await libraryApi.deleteStory(storyId);
       setSavedStories(savedStories.filter(s => s.id !== storyId));
@@ -686,7 +686,7 @@ export default function StoryLoom() {
       <LoadingBar loading={isLoading} />
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-teal-900">
         {/* Toast Notifications */}
-        <Toaster 
+        <Toaster
           position="top-right"
           toastOptions={{
             duration: 3000,
@@ -709,7 +709,7 @@ export default function StoryLoom() {
             },
           }}
         />
-        
+
         {/* Header */}
         <Header
           currentUser={currentUser}
@@ -740,7 +740,7 @@ export default function StoryLoom() {
                   <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full animate-bounce delay-300"></div>
                   <div className="absolute -bottom-1 -left-3 w-4 h-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full animate-bounce delay-700"></div>
                 </div>
-                
+
                 <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white mb-3 md:mb-4 leading-tight">
                   Create Your
                   <span className="block text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-cyan-400 to-blue-400 animate-pulse">
@@ -780,7 +780,7 @@ export default function StoryLoom() {
                       <h2 className="text-xl md:text-2xl font-bold text-white mb-2">Start Your Adventure</h2>
                       <p className="text-sm md:text-base text-slate-400">Choose your preferences and let AI create magic</p>
                     </div>
-                    
+
                     {error && (
                       <div className="mb-6 p-4 bg-red-500/20 border border-red-500/40 rounded-xl text-red-300 text-sm md:text-base">
                         <div className="flex items-center gap-2">
@@ -818,16 +818,14 @@ export default function StoryLoom() {
                               <button
                                 key={key}
                                 onClick={() => setSelectedAgeGroup(key as AgeGroup)}
-                                className={`p-4 md:p-6 rounded-2xl text-left transition-all duration-300 transform hover:scale-102 active:scale-98 ${
-                                  selectedAgeGroup === key
+                                className={`p-4 md:p-6 rounded-2xl text-left transition-all duration-300 transform hover:scale-102 active:scale-98 ${selectedAgeGroup === key
                                     ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-900 shadow-lg shadow-teal-500/30'
                                     : 'bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 border border-slate-600/50'
-                                }`}
+                                  }`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl ${
-                                    selectedAgeGroup === key ? 'bg-white/20' : 'bg-slate-600/50'
-                                  }`}>
+                                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl ${selectedAgeGroup === key ? 'bg-white/20' : 'bg-slate-600/50'
+                                    }`}>
                                     {info.emoji}
                                   </div>
                                   <div className="flex-1">
@@ -854,11 +852,10 @@ export default function StoryLoom() {
                               <button
                                 key={theme}
                                 onClick={() => setSelectedTheme(theme)}
-                                className={`px-3 py-3 md:px-4 md:py-4 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 active:scale-95 text-sm md:text-base ${
-                                  selectedTheme === theme
+                                className={`px-3 py-3 md:px-4 md:py-4 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 active:scale-95 text-sm md:text-base ${selectedTheme === theme
                                     ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30'
                                     : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 border border-slate-600/50'
-                                }`}
+                                  }`}
                               >
                                 {theme}
                               </button>
@@ -868,224 +865,224 @@ export default function StoryLoom() {
                       )}
 
                       {wizardStep === 3 && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-amber-400 to-orange-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">3</div>
-                          <h3 className="text-lg md:text-xl font-semibold text-white">
-                            Describe your story idea 
-                            <span className="text-slate-400 font-normal text-sm md:text-base">(optional)</span>
-                          </h3>
-                        </div>
-                        <div className="relative">
-                          <textarea
-                            value={customPrompt}
-                            onChange={(e) => setCustomPrompt(e.target.value)}
-                            placeholder="Tell us what your story should be about... (e.g., 'A magical cat who can talk and goes on space adventures')"
-                            className="w-full px-4 py-4 md:px-6 md:py-6 bg-slate-700/50 border border-slate-600/50 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 resize-none text-sm md:text-base leading-relaxed"
-                            rows={4}
-                            maxLength={500}
-                          />
-                          <div className="absolute bottom-3 right-3 text-xs text-slate-500">
-                            {customPrompt.length}/500
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 md:w-8 md:h-8 bg-gradient-to-r from-amber-400 to-orange-400 rounded-full flex items-center justify-center text-slate-900 text-sm md:text-base font-bold">3</div>
+                            <h3 className="text-lg md:text-xl font-semibold text-white">
+                              Describe your story idea
+                              <span className="text-slate-400 font-normal text-sm md:text-base">(optional)</span>
+                            </h3>
+                          </div>
+                          <div className="relative">
+                            <textarea
+                              value={customPrompt}
+                              onChange={(e) => setCustomPrompt(e.target.value)}
+                              placeholder="Tell us what your story should be about... (e.g., 'A magical cat who can talk and goes on space adventures')"
+                              className="w-full px-4 py-4 md:px-6 md:py-6 bg-slate-700/50 border border-slate-600/50 rounded-2xl text-white placeholder-slate-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 resize-none text-sm md:text-base leading-relaxed"
+                              rows={4}
+                              maxLength={500}
+                            />
+                            <div className="absolute bottom-3 right-3 text-xs text-slate-500">
+                              {customPrompt.length}/500
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Navigation: Back / Next / Create */}
-                    <div className="pt-4 md:pt-6 flex items-center gap-3">
-                      <button
-                        onClick={() => setWizardStep(Math.max(1, wizardStep - 1))}
-                        disabled={wizardStep === 1}
-                        className="flex-1 bg-slate-700/40 text-white px-4 py-3 rounded-2xl font-semibold text-sm md:text-base hover:bg-slate-700/60 disabled:opacity-50 disabled:cursor-not-allowed transition">
-                        Back
-                      </button>
-
-                      {wizardStep < 3 ? (
+                      {/* Navigation: Back / Next / Create */}
+                      <div className="pt-4 md:pt-6 flex items-center gap-3">
                         <button
-                          onClick={() => setWizardStep(Math.min(3, wizardStep + 1))}
-                          className="flex-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 text-white px-4 py-3 rounded-2xl font-bold text-sm md:text-base shadow transition transform hover:scale-102">
-                          Next
+                          onClick={() => setWizardStep(Math.max(1, wizardStep - 1))}
+                          disabled={wizardStep === 1}
+                          className="flex-1 bg-slate-700/40 text-white px-4 py-3 rounded-2xl font-semibold text-sm md:text-base hover:bg-slate-700/60 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                          Back
                         </button>
-                      ) : (
-                        <button 
-                          onClick={handleGenerateStory}
-                          disabled={isGenerating || !selectedAgeGroup}
-                          className="flex-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 text-white px-4 py-3 rounded-2xl font-bold text-sm md:text-base shadow transition transform hover:scale-102 disabled:opacity-50 disabled:cursor-not-allowed">
-                          {isGenerating ? (isGeneratingQuiz ? 'Adding Quiz & Flashcards...' : 'Crafting Your Story...') : 'Create My Story'}
-                        </button>
+
+                        {wizardStep < 3 ? (
+                          <button
+                            onClick={() => setWizardStep(Math.min(3, wizardStep + 1))}
+                            className="flex-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 text-white px-4 py-3 rounded-2xl font-bold text-sm md:text-base shadow transition transform hover:scale-102">
+                            Next
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleGenerateStory}
+                            disabled={isGenerating || !selectedAgeGroup}
+                            className="flex-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500 text-white px-4 py-3 rounded-2xl font-bold text-sm md:text-base shadow transition transform hover:scale-102 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isGenerating ? (isGeneratingQuiz ? 'Adding Quiz & Flashcards...' : 'Crafting Your Story...') : 'Create My Story'}
+                          </button>
+                        )}
+                      </div>
+
+                      {!selectedAgeGroup && (
+                        <p className="text-center text-amber-400 text-sm mt-2 flex items-center justify-center gap-2">
+                          <span className="w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center text-slate-900 text-xs">!</span>
+                          Please select an age group to continue
+                        </p>
                       )}
                     </div>
-
-                    {!selectedAgeGroup && (
-                      <p className="text-center text-amber-400 text-sm mt-2 flex items-center justify-center gap-2">
-                        <span className="w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center text-slate-900 text-xs">!</span>
-                        Please select an age group to continue
-                      </p>
-                    )}
                   </div>
-                </div>
-              )}
-            </div>
-
-            {/* Features Section - Mobile-Optimized Cards */}
-            <div className="space-y-6">
-              <div className="text-center">
-                <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">Why Choose StoryLoom?</h2>
-                <p className="text-slate-400 text-sm md:text-base">Discover the magic of AI-powered storytelling</p>
+                )}
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-teal-500/20 rounded-2xl p-6 hover:border-teal-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-teal-500/20">
-                  <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-teal-400 to-cyan-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <BookOpen className="w-6 h-6 md:w-7 md:h-7 text-slate-900" />
-                  </div>
-                  <h3 className="text-lg md:text-xl font-bold text-white mb-2">AI-Powered Stories</h3>
-                  <p className="text-sm md:text-base text-slate-400 leading-relaxed">Unique narratives with stunning cover art, tailored to your age and interests</p>
+
+              {/* Features Section - Mobile-Optimized Cards */}
+              <div className="space-y-6">
+                <div className="text-center">
+                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">Why Choose StoryLoom?</h2>
+                  <p className="text-slate-400 text-sm md:text-base">Discover the magic of AI-powered storytelling</p>
                 </div>
 
-                <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-orange-500/20 rounded-2xl p-6 hover:border-orange-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-orange-500/20">
-                  <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-orange-400 to-red-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <Volume2 className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                  <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-teal-500/20 rounded-2xl p-6 hover:border-teal-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-teal-500/20">
+                    <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-teal-400 to-cyan-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                      <BookOpen className="w-6 h-6 md:w-7 md:h-7 text-slate-900" />
+                    </div>
+                    <h3 className="text-lg md:text-xl font-bold text-white mb-2">AI-Powered Stories</h3>
+                    <p className="text-sm md:text-base text-slate-400 leading-relaxed">Unique narratives with stunning cover art, tailored to your age and interests</p>
                   </div>
-                  <h3 className="text-lg md:text-xl font-bold text-white mb-2">Text-to-Speech</h3>
-                  <p className="text-sm md:text-base text-slate-400 leading-relaxed">Listen to stories in multiple voices and languages with customizable speed</p>
-                </div>
 
-                <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-cyan-500/20 rounded-2xl p-6 hover:border-cyan-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/20">
-                  <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <CheckCircle className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                  <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-orange-500/20 rounded-2xl p-6 hover:border-orange-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-orange-500/20">
+                    <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-orange-400 to-red-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                      <Volume2 className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                    </div>
+                    <h3 className="text-lg md:text-xl font-bold text-white mb-2">Text-to-Speech</h3>
+                    <p className="text-sm md:text-base text-slate-400 leading-relaxed">Listen to stories in multiple voices and languages with customizable speed</p>
                   </div>
-                  <h3 className="text-lg md:text-xl font-bold text-white mb-2">Interactive Quizzes</h3>
-                  <p className="text-sm md:text-base text-slate-400 leading-relaxed">Test comprehension with engaging quizzes and track your progress</p>
-                </div>
 
-                <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-purple-500/20 rounded-2xl p-6 hover:border-purple-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-purple-500/20">
-                  <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-purple-400 to-pink-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <GraduationCap className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                  <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-cyan-500/20 rounded-2xl p-6 hover:border-cyan-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/20">
+                    <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-cyan-400 to-blue-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                      <CheckCircle className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                    </div>
+                    <h3 className="text-lg md:text-xl font-bold text-white mb-2">Interactive Quizzes</h3>
+                    <p className="text-sm md:text-base text-slate-400 leading-relaxed">Test comprehension with engaging quizzes and track your progress</p>
                   </div>
-                  <h3 className="text-lg md:text-xl font-bold text-white mb-2">Smart Flashcards</h3>
-                  <p className="text-sm md:text-base text-slate-400 leading-relaxed">Learn new vocabulary with interactive flashcards and examples</p>
+
+                  <div className="group bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-md border border-purple-500/20 rounded-2xl p-6 hover:border-purple-500/40 transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:shadow-purple-500/20">
+                    <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-purple-400 to-pink-400 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                      <GraduationCap className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                    </div>
+                    <h3 className="text-lg md:text-xl font-bold text-white mb-2">Smart Flashcards</h3>
+                    <p className="text-sm md:text-base text-slate-400 leading-relaxed">Learn new vocabulary with interactive flashcards and examples</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           )}
 
           {/* Story View */}
-        {activeView === 'story' && currentStory && (
-          <StoryView
-            currentStory={currentStory}
-            coverImage={coverImage}
-            isGeneratingImage={isGeneratingImage}
-            selectedLanguage={selectedLanguage}
-            translatedStory={translatedStory}
-            isSpeaking={isSpeaking}
-            isPaused={isPaused}
-            showVoiceSettings={showVoiceSettings}
-            availableVoices={availableVoices}
-            selectedVoice={selectedVoice}
-            speechRate={speechRate}
-            isGeneratingFlashcards={isGeneratingFlashcards}
-            currentUser={currentUser}
-            currentLoadedStoryId={currentLoadedStoryId}
-            isSavingStory={isSavingStory}
-            handleSpeak={handleSpeak}
-            handleStopSpeaking={handleStopSpeaking}
-            setShowVoiceSettings={setShowVoiceSettings}
-            setSelectedVoice={setSelectedVoice}
-            setSpeechRate={setSpeechRate}
-            handleStartQuiz={handleStartQuiz}
-            handleGenerateFlashcards={handleGenerateFlashcards}
-            handleDeleteStoryFromView={handleDeleteStoryFromView}
-            handleSaveStory={handleSaveStory}
-            handleNewStory={handleNewStory}
-          />
-        )}
+          {activeView === 'story' && currentStory && (
+            <StoryView
+              currentStory={currentStory}
+              coverImage={coverImage}
+              isGeneratingImage={isGeneratingImage}
+              selectedLanguage={selectedLanguage}
+              translatedStory={translatedStory}
+              isSpeaking={isSpeaking}
+              isPaused={isPaused}
+              showVoiceSettings={showVoiceSettings}
+              availableVoices={availableVoices}
+              selectedVoice={selectedVoice}
+              speechRate={speechRate}
+              isGeneratingFlashcards={isGeneratingFlashcards}
+              currentUser={currentUser}
+              currentLoadedStoryId={currentLoadedStoryId}
+              isSavingStory={isSavingStory}
+              handleSpeak={handleSpeak}
+              handleStopSpeaking={handleStopSpeaking}
+              setShowVoiceSettings={setShowVoiceSettings}
+              setSelectedVoice={setSelectedVoice}
+              setSpeechRate={setSpeechRate}
+              handleStartQuiz={handleStartQuiz}
+              handleGenerateFlashcards={handleGenerateFlashcards}
+              handleDeleteStoryFromView={handleDeleteStoryFromView}
+              handleSaveStory={handleSaveStory}
+              handleNewStory={handleNewStory}
+            />
+          )}
 
-        {/* Flashcards View */}
-        {activeView === 'flashcards' && flashcards.length > 0 && (
-          <FlashcardsView
-            flashcards={flashcards}
-            currentFlashcardIndex={currentFlashcardIndex}
-            showFlashcardAnswer={showFlashcardAnswer}
-            selectedLanguage={selectedLanguage}
-            translatedFlashcards={translatedFlashcards}
-            flipFlashcard={flipFlashcard}
-            nextFlashcard={nextFlashcard}
-            prevFlashcard={prevFlashcard}
-            onBackToStory={() => setActiveView('story')}
-          />
-        )}
+          {/* Flashcards View */}
+          {activeView === 'flashcards' && flashcards.length > 0 && (
+            <FlashcardsView
+              flashcards={flashcards}
+              currentFlashcardIndex={currentFlashcardIndex}
+              showFlashcardAnswer={showFlashcardAnswer}
+              selectedLanguage={selectedLanguage}
+              translatedFlashcards={translatedFlashcards}
+              flipFlashcard={flipFlashcard}
+              nextFlashcard={nextFlashcard}
+              prevFlashcard={prevFlashcard}
+              onBackToStory={() => setActiveView('story')}
+            />
+          )}
 
-        {/* Quiz View */}
-        {(activeView === 'quiz' || activeView === 'results') && currentStory && (
-          <QuizView
-            currentStory={currentStory}
-            currentQuestion={currentQuestion}
-            selectedAnswer={selectedAnswer}
-            showResult={showResult}
-            score={score}
-            selectedLanguage={selectedLanguage}
-            translatedQuiz={translatedQuiz}
-            isResultsView={activeView === 'results'}
-            handleAnswerSelect={handleAnswerSelect}
-            handleSubmitAnswer={handleSubmitAnswer}
-            handleNextQuestion={handleNextQuestion}
-            handleRetry={handleRetry}
-            handleNewStory={handleNewStory}
-          />
-        )}
+          {/* Quiz View */}
+          {(activeView === 'quiz' || activeView === 'results') && currentStory && (
+            <QuizView
+              currentStory={currentStory}
+              currentQuestion={currentQuestion}
+              selectedAnswer={selectedAnswer}
+              showResult={showResult}
+              score={score}
+              selectedLanguage={selectedLanguage}
+              translatedQuiz={translatedQuiz}
+              isResultsView={activeView === 'results'}
+              handleAnswerSelect={handleAnswerSelect}
+              handleSubmitAnswer={handleSubmitAnswer}
+              handleNextQuestion={handleNextQuestion}
+              handleRetry={handleRetry}
+              handleNewStory={handleNewStory}
+            />
+          )}
 
-        {/* Profile View */}
-        {activeView === 'profile' && currentUser && (
-          <ProfileView
-            currentUser={currentUser}
-            userStats={userStats}
-            setActiveView={setActiveView}
-            handleLoadLibrary={handleLoadLibrary}
-          />
-        )}
+          {/* Profile View */}
+          {activeView === 'profile' && currentUser && (
+            <ProfileView
+              currentUser={currentUser}
+              userStats={userStats}
+              setActiveView={setActiveView}
+              handleLoadLibrary={handleLoadLibrary}
+            />
+          )}
 
-        {/* Auth Views (Login & Register) */}
-        {(activeView === 'login' || activeView === 'register') && (
-          <AuthView
-            activeView={activeView}
-            authError={authError}
-            loginUsername={loginUsername}
-            loginPassword={loginPassword}
-            registerUsername={registerUsername}
-            registerEmail={registerEmail}
-            registerPassword={registerPassword}
-            isAuthenticating={isAuthenticating}
-            showPasswordRecovery={showPasswordRecovery}
-            recoveryEmail={recoveryEmail}
-            isRecovering={isRecovering}
-            setLoginUsername={setLoginUsername}
-            setLoginPassword={setLoginPassword}
-            setRegisterUsername={setRegisterUsername}
-            setRegisterEmail={setRegisterEmail}
-            setRegisterPassword={setRegisterPassword}
-            setShowPasswordRecovery={setShowPasswordRecovery}
-            setRecoveryEmail={setRecoveryEmail}
-            setActiveView={setActiveView}
-            handleLogin={handleLogin}
-            handleRegister={handleRegister}
-            handlePasswordRecovery={handlePasswordRecovery}
-            handleNewStory={handleNewStory}
-          />
-        )}
+          {/* Auth Views (Login & Register) */}
+          {(activeView === 'login' || activeView === 'register') && (
+            <AuthView
+              activeView={activeView}
+              authError={authError}
+              loginUsername={loginUsername}
+              loginPassword={loginPassword}
+              registerUsername={registerUsername}
+              registerEmail={registerEmail}
+              registerPassword={registerPassword}
+              isAuthenticating={isAuthenticating}
+              showPasswordRecovery={showPasswordRecovery}
+              recoveryEmail={recoveryEmail}
+              isRecovering={isRecovering}
+              setLoginUsername={setLoginUsername}
+              setLoginPassword={setLoginPassword}
+              setRegisterUsername={setRegisterUsername}
+              setRegisterEmail={setRegisterEmail}
+              setRegisterPassword={setRegisterPassword}
+              setShowPasswordRecovery={setShowPasswordRecovery}
+              setRecoveryEmail={setRecoveryEmail}
+              setActiveView={setActiveView}
+              handleLogin={handleLogin}
+              handleRegister={handleRegister}
+              handlePasswordRecovery={handlePasswordRecovery}
+              handleNewStory={handleNewStory}
+            />
+          )}
 
-        {/* Library View */}
-        {activeView === 'library' && (
-          <LibraryView
-            isLoadingLibrary={isLoadingLibrary}
-            savedStories={savedStories}
-            handleNewStory={handleNewStory}
-            handleLoadSavedStory={handleLoadSavedStory}
-            handleDeleteStory={handleDeleteStory}
-          />
-        )}
+          {/* Library View */}
+          {activeView === 'library' && (
+            <LibraryView
+              isLoadingLibrary={isLoadingLibrary}
+              savedStories={savedStories}
+              handleNewStory={handleNewStory}
+              handleLoadSavedStory={handleLoadSavedStory}
+              handleDeleteStory={handleDeleteStory}
+            />
+          )}
         </main>
 
         {/* Footer is now part of content flow, no spacer needed */}
