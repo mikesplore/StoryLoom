@@ -814,8 +814,11 @@ def update_activity():
 
 
 if __name__ == '__main__':
-    # Create tables
+    # For local development only: create tables and run Flask dev server
     with app.app_context():
         db.create_all()
-    
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+# For production, use Gunicorn:
+#   gunicorn app:app
+# Ensure database tables are created/migrated before deploying to production.
