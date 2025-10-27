@@ -32,7 +32,9 @@ CORS(app,
     supports_credentials=True,
     origins=[
         "https://story-loom-green.vercel.app",
-        "https://storyloom-wq6a.onrender.com"
+        "https://storyloom-wq6a.onrender.com",
+        "http://localhost:4173",
+        "http://localhost:5173"
     ],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
