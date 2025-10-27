@@ -1,8 +1,8 @@
 # StoryLoom
 
 <p align="center">
-  <img src="src/stock/images/image1.png" alt="StoryLoom Screenshot 1" width="350" style="border-radius:12px; margin:8px;" />
-  <img src="src/stock/images/image2.png" alt="StoryLoom Screenshot 2" width="350" style="border-radius:12px; margin:8px;" />
+  <img src="frontend/src/stock/images/image1.png" alt="StoryLoom Screenshot 1" width="350" style="border-radius:12px; margin:8px;" />
+  <img src="frontend/src/stock/images/image2.png" alt="StoryLoom Screenshot 2" width="350" style="border-radius:12px; margin:8px;" />
 </p>
 
 **StoryLoom** is an AI-powered storytelling web app that lets users create unique, age-appropriate stories on any theme, with beautiful AI-generated cover images. After reading, users can take a quiz based on the story, learn new vocabulary with flashcards, and translate the entire experience into multiple languages. The app also features a read-aloud mode, allowing stories to be listened to in different voices and languages.
